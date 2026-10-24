@@ -1,0 +1,39 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - '*@*'
+
+permissions:
+  contents: read
+  id-token: write # npm Trusted Publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Resolve package from tag
+        id: pkg
+        run: |
+          dir="${GITHUB_REF_NAME%@*}"
+          version="${GITHUB_REF_NAME##*@}"
+          test -f "packages/$dir/package.json" || { echo "::error::packages/$dir/package.json does not exist"; exit 1; }
+          actual="$(node -p "require('./packages/$dir/package.json').version")"
+          test "$actual" = "$version" || { echo "::error::tag version $version != package.json version $actual"; exit 1; }
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+      - name: Pack
+        working-directory: packages/${{ steps.pkg.outputs.dir }}
+        run: pnpm pack --out package.tgz
+      - name: Publish
+        working-directory: packages/${{ steps.pkg.outputs.dir }}
+        run: npm publish package.tgz --access public --provenance

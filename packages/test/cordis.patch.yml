@@ -1,0 +1,3 @@
+- insert:
+    - id: amadeus-test
+      name: '@amadeus-dsh/test'
