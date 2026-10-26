@@ -45,9 +45,9 @@ git log --oneline origin/<分支>..HEAD
 没有通用的本地基线。每个行为改动都需要一个最窄的、在发生回归时会失败的测试或检查；只有改动真正触及的部分，才追加更宽的检查。
 
 - **包的源码行为**：运行该包对应的测试。共享的契约改变时，追加依赖它的其他包的测试。
-- **TypeScript 代码**：运行 `pnpm run lint` 和 `pnpm run typecheck`。
-- **包清单、公共导出、`cordis.patch.yml` 或构建配置**：运行 `pnpm run build`，在包目录 `pnpm pack` 并检查打包内容，再按 [AGENTS.md](../../../AGENTS.md#命令) 的本地验证方法把它装进隔离的 `DSH_HOME`，确认配置层出现、插件能加载。
-- **文档、注释或 skill**：按 [docs/AGENTS.md](../../../docs/AGENTS.md) 检查，并运行 `git diff --check`。
+- **TypeScript 代码**：运行 `pnpm run lint`、`pnpm run typecheck` 和 `pnpm run hygiene`。
+- **包清单、公共导出、`cordis.patch.yml` 或构建配置**：运行 `pnpm run build` 和 `pnpm run hygiene`，在包目录 `pnpm pack` 并检查打包内容，再按 [AGENTS.md](../../../AGENTS.md#命令) 的本地验证方法把它装进隔离的 `DSH_HOME`，确认配置层出现、插件能加载。
+- **文档、Agent Notes、skill 或导出的 JSDoc**：按 [docs/AGENTS.md](../../../docs/AGENTS.md) 检查，并运行 `pnpm run doc-sync` 和 `git diff --check`。
 - **发布流程（`.github/workflows/publish.yml`、版本号、tag）**：确认 tag 中的版本与包的 `package.json` 一致，并在本地完成 `pnpm pack`。
 
 不要仅仅因为接下来要提交或推送，就手动重复一个已经通过的检查。

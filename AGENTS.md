@@ -57,7 +57,7 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 - `strict: true` 与 `noImplicitAny`；每个保留的 `any` 写明为何无法收窄。禁止 `as unknown` / `<unknown>` 断言。
 - 同进程、有类型的接口之间信任 TypeScript；运行时校验只放在配置、模型或工具的 JSON、持久化文件、子进程和网络边界。
 - 默认值在显式的 `resolve()` 步骤给出，不在执行函数里写隐藏的 `?? default`；不写多层 `?.` 回退来掩盖值该不该存在。
-- 封闭联合的 `switch` 以 `assertNever` 结尾。
+- 按判别字段 `switch`：封闭联合以本仓库自己定义的 `assertNever` 结尾，不依赖 DSH 的工具包；可通过声明合并扩展的联合走一个写明理由的 `default`。
 - 空 `catch` 写明吞掉的错误和原因，`try` 只包一条语句。catch 后只打日志就继续不算恢复。
 - 每个抽象、配置项和兼容路径都要有当前的消费者；没有就删除。优先使用维护中的依赖，前提是它确实删掉了自有代码。
 
