@@ -12,11 +12,8 @@
     "lint": "oxlint"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.4",
-    "@commitlint/config-conventional": "^21.2.4",
     "@stylistic/eslint-plugin": "^5.10.0",
     "eslint-plugin-sonarjs": "^4.2.0",
-    "lefthook": "^2.2.2",
     "oxlint": "1.81.0",
     "oxlint-tsgolint": "7.0.2001",
     "typescript": "^6.0.3"
