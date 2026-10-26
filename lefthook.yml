@@ -1,0 +1,16 @@
+# Git hooks. Keep these local checkpoints fast; CI runs the complete checks.
+
+pre-commit:
+  jobs:
+    - name: lint (staged)
+      glob: '*.{ts,tsx}'
+      run: pnpm exec oxlint --config .oxlintrc.staged.json --fix {staged_files}
+      stage_fixed: true
+
+    - name: whitespace (staged)
+      run: git diff --cached --check
+
+pre-push:
+  jobs:
+    - name: typecheck
+      run: pnpm run typecheck

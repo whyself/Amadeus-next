@@ -1,2 +1,6 @@
 packages:
   - packages/*
+
+# pnpm refuses dependency install scripts unless they are listed here. lefthook's script installs the git hooks below.
+allowBuilds:
+  lefthook: true
