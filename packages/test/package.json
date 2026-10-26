@@ -1,6 +1,6 @@
 {
   "name": "@amadeus-dsh/test",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "加载时打印一行日志的最小 DSH 插件，用于验证构建与发布流程。",
   "type": "module",
   "main": "./lib/index.js",
