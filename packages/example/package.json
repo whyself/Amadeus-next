@@ -1,6 +1,6 @@
 {
-  "name": "@amadeus-dsh/test",
-  "version": "0.1.1",
+  "name": "@amadeus-dsh/example",
+  "version": "0.0.0",
   "private": true,
   "description": "加载时打印一行日志的最小 DSH 插件，作为仓库内的插件示例和门禁、测试的对象，不发布。",
   "type": "module",
@@ -47,6 +47,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/whyself/Amadeus-next.git",
-    "directory": "packages/test"
+    "directory": "packages/example"
   }
 }

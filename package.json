@@ -15,6 +15,10 @@
     "hygiene": "node scripts/run-gates.ts hygiene"
   },
   "devDependencies": {
+    "@amadeus-dsh/example": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/cordis-plugin-include": "~1.0.10",
+    "@deepseek-ai/cordis-plugin-loader": "~1.0.6",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/js-yaml": "^4.0.9",
     "@types/mdast": "^4.0.4",

@@ -72,7 +72,7 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 ## 测试与验证
 
 - 单元测试用 Vitest。测试验证外部状态（文件、日志、事件、销毁后的注册表），不断言模型或 agent 的自述；只 mock LLM、网络和时钟。
-- 每个 bundle 有一个经过真实 DSH Loader 组合的加载测试，覆盖安装后 `cordis.patch.yml` 能被组合、插件能启动和销毁。
+- 每个 bundle 有一个经过真实 DSH Loader 组合的加载测试，覆盖安装后 `cordis.patch.yml` 能被组合、插件能启动和销毁；用 [scripts/test-support/boot-bundle.ts](scripts/test-support/boot-bundle.ts) 加载，模板是 [packages/example/tests/loader.spec.ts](packages/example/tests/loader.spec.ts)。加载测试读取构建产物，运行前先 `pnpm run build`。
 - 新增的检查规则附一个会被它拒绝的非法用例。
 - 汇报时只列实际运行过的命令。无法自动化的行为标注为需要人工验收。
 
@@ -80,4 +80,4 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 
 - 发布到 npm，发布内容是预构建的 `lib/`、`cordis.patch.yml` 和 locale 文件；用户安装时不需要授权构建脚本。
 - 由 GitHub Actions 发布并附 provenance；包带 `dsh-plugin` 关键词，仓库带 `dsh-plugin` topic。
-- 推送 `<包目录名>@<版本>` 格式的 tag（例如 `test@0.1.0`）触发 `.github/workflows/publish.yml`；tag 中的版本必须与该包 `package.json` 一致。npm 端为每个包配置 Trusted Publisher，不使用长期 token。
+- 推送 `<包目录名>@<版本>` 格式的 tag（例如 `files@0.1.0`）触发 `.github/workflows/publish.yml`；tag 中的版本必须与该包 `package.json` 一致。npm 端为每个包配置 Trusted Publisher，不使用长期 token。
