@@ -1,7 +1,8 @@
 {
   "name": "@amadeus-dsh/test",
   "version": "0.1.1",
-  "description": "加载时打印一行日志的最小 DSH 插件，用于验证构建与发布流程。",
+  "private": true,
+  "description": "加载时打印一行日志的最小 DSH 插件，作为仓库内的插件示例和门禁、测试的对象，不发布。",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -43,9 +44,6 @@
     "amadeus"
   ],
   "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/whyself/Amadeus-next.git",

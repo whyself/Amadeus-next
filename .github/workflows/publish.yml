@@ -27,6 +27,7 @@ jobs:
           test -f "packages/$dir/package.json" || { echo "::error::packages/$dir/package.json does not exist"; exit 1; }
           actual="$(node -p "require('./packages/$dir/package.json').version")"
           test "$actual" = "$version" || { echo "::error::tag version $version != package.json version $actual"; exit 1; }
+          test "$(node -p "require('./packages/$dir/package.json').private === true")" = false || { echo "::error::packages/$dir is private and is never published"; exit 1; }
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint

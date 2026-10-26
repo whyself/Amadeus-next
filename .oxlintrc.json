@@ -12,7 +12,7 @@
     "builtin": true
   },
   "ignorePatterns": [
-    "**/lib/**",
+    "packages/*/lib/**",
     "**/node_modules/**",
     "**/*.js",
     "**/*.mjs",
