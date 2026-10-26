@@ -33,9 +33,23 @@ export interface BootOptions {
   rows?: readonly string[]
 }
 
-function patchList(value: unknown, file: string): PatchOptions[] {
+/**
+ * Check a parsed bundle patch file before it reaches the Loader.
+ * @param value - the file parsed with the Include entry-list schema.
+ * @param file - patch file name used in errors.
+ * @returns the patches in file order.
+ * @throws when the file is not a list or any item is not a mapping, so a patch the installed bundle would apply is never dropped.
+ */
+export function parsePatchList(value: unknown, file: string): PatchOptions[] {
   if (!Array.isArray(value)) throw new Error(`${file} must be a YAML list of patches`)
-  return value.filter((item): item is PatchOptions => typeof item === 'object' && item !== null)
+  return value.map((item: unknown, index): PatchOptions => {
+    if (!isPatch(item)) throw new Error(`${file} item ${index + 1} must be a patch mapping, got ${JSON.stringify(item)}`)
+    return item
+  })
+}
+
+function isPatch(item: unknown): item is PatchOptions {
+  return typeof item === 'object' && item !== null && !Array.isArray(item)
 }
 
 /**
@@ -56,7 +70,7 @@ export async function bootBundle(packageDir: string, options: BootOptions = {}):
   const bundle = 'bundle' in dsh && typeof dsh.bundle === 'object' && dsh.bundle !== null ? dsh.bundle : {}
   const patchFile = 'patch' in bundle && typeof bundle.patch === 'string' ? bundle.patch : undefined
   if (patchFile === undefined) throw new Error(`${packageDir}/package.json declares no dsh.bundle.patch`)
-  const patches = patchList(load(await readFile(join(directory, patchFile), 'utf8'), { schema: entryListSchema }), patchFile)
+  const patches = parsePatchList(load(await readFile(join(directory, patchFile), 'utf8'), { schema: entryListSchema }), patchFile)
 
   const root = await mkdtemp(join(tmpdir(), 'amadeus-boot-'))
   const configPath = join(root, 'cordis.yml')
