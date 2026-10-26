@@ -12,6 +12,8 @@ Amadeus-next 是面向个性化、一体化、remote work 的一组 DeepSeek Har
 ```
 packages/<name>/   每个目录是一个可单独安装的 bundle：package.json 声明 dsh.bundle，带 cordis.patch.yml
 docs/              跨包文档；单个包的配置、行为与限制写在该包的 README.md
+scripts/           文档门禁、代码门禁和测试工具，由根 package.json 的命令调用
+.agents/           Agent Notes（决策记录）与 skills；.claude/skills 链接到 .agents/skills
 ```
 
 - pnpm workspace，ESM（`"type": "module"`），TypeScript 源码在 `src/`，构建产物在 `lib/`。
@@ -39,16 +41,16 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 - **只依赖 DSH 的公开扩展点**，例如服务、事件、工具注册、waterfall、`systemPrompt`、`appendPluginRecord`、客户端插槽，以及在 `cordis.patch.yml` 中替换或禁用内置插件。只从 `@deepseek-ai/*` 包的公开 `exports` 导入，不读 DSH 安装目录或 `node_modules` 内的路径。找不到扩展点时先向用户说明可选方案和代价，不复制或改写 DSH 原生插件。
 - **兼容性显式声明**：每个包的 `engines.dsh` 写出已验证的 DSH 版本范围，DSH 安装和启动时据此拒绝不兼容版本。当前基线为 0.2.1-rc.3，范围写 `>=0.2.1-rc.3 <0.3.0-0`；DSH 比较时包含预发布版本，上限用 `-0` 排除 0.3.0 的预发布。需要与宿主共享实例的 `@deepseek-ai/*` 包同时写进 `peerDependencies` 与 `devDependencies`；第三方依赖写进 `dependencies`。
 - **配置走 cordis**：随部署变化的选项是经过 Schemastery 校验的插件 `Config` 字段，可在 profile 的 `cordis.patch.yml` 中修改。`DEFAULT_*` 常量不算可配置。
-- **外部程序不由插件安装**：需要外部可执行文件或服务时，经 `Config` 指定路径或地址，加载时检测；缺失时报出明确错误并只停用该功能。
+- **外部程序不由插件安装**：需要外部可执行文件或服务时，经 `Config` 指定路径或地址，加载时检测；缺失时报出明确错误，只停用依赖它的功能，插件其余部分照常加载。
 
 ## 插件约定
 
-- 所有注册经过 `ctx.effect()` / `ctx.on()`，`register()` 返回销毁函数；插件 dispose 后不留下副作用。
+- 所有注册经过 `ctx.effect()` / `ctx.on()`；插件自己提供的注册表，其 `register()` 返回销毁函数。插件 dispose 后不留下副作用。
 - waterfall 监听器必须调用 `next()`。
 - 模型可见 ⟺ 已记录：进入模型请求的内容必须能从 Session 日志重建，新增模型可见输入要写对应的插件会话记录。
 - 共享状态挂在服务或插件实例上；不新增模块级单例、全局缓存或 `globalThis` 状态。
 - 客户端界面文字走 locale 字典，不在 JSX 里硬编码。
-- 配置错误在加载时报错；不静默跳过缺失的引用。
+- `Config` 校验失败或引用的插件、服务、文件不存在时，插件加载失败并报出原因；不静默跳过缺失的引用。外部程序缺失按上文只停用对应功能。
 
 ## 代码
 

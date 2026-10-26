@@ -16,7 +16,7 @@ type(scope): 动词原形开头的行为描述
 ```
 
 - `type` 常用 `feat`（新能力）、`fix`（修复缺陷）、`docs`（只改文档、注释或许可证）、`test`（只改测试）、`refactor`（行为不变的结构调整）、`perf`、`build`（构建、依赖、打包）、`ci`、`chore`、`revert`。
-- `scope` 写包名，例如 `feat(test): ...`；改动跨多个包或属于整个仓库时省略 scope。
+- `scope` 写包目录名（`packages/<目录名>` 中的目录名，与发布 tag 的前缀相同），例如 `feat(files): ...`；改动跨多个包或属于整个仓库时省略 scope。
 - 描述写这次提交带来的行为结果，不写改了哪个文件；用英文，小写开头，结尾不加句号。
 - 破坏性变更在 type 或 scope 后加 `!`，例如 `feat(reader)!: ...`，并在正文写出用户的迁移方法。
 - `revert` 写恢复了什么行为，而不是 "Revert 'xxx'"。
