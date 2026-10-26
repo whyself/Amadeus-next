@@ -67,7 +67,7 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 - 写文档前先读 [docs/AGENTS.md](docs/AGENTS.md)：分层、一事实一归属和 slop 清单在那里。
 - **只为长期有效的决策理由写 Agent Note**；机械性和局部的改动不写，包括局部 UI 调整（[范围](.agents/notes/README.md#什么时候写)）。
 
-## 证据
+## 测试与验证
 
 - 单元测试用 Vitest。测试验证外部状态（文件、日志、事件、销毁后的注册表），不断言模型或 agent 的自述；只 mock LLM、网络和时钟。
 - 每个 bundle 有一个经过真实 DSH Loader 组合的加载测试，覆盖安装后 `cordis.patch.yml` 能被组合、插件能启动和销毁。
