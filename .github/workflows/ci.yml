@@ -34,5 +34,6 @@ jobs:
         with:
           node-version: 24
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build # the Loader tests import each package's built lib/
       - run: pnpm run test
       - run: pnpm run doc-sync
