@@ -6,8 +6,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -72,12 +71,14 @@ export async function bootBundle(packageDir: string, options: BootOptions = {}):
   if (patchFile === undefined) throw new Error(`${packageDir}/package.json declares no dsh.bundle.patch`)
   const patches = parsePatchList(load(await readFile(join(directory, patchFile), 'utf8'), { schema: entryListSchema }), patchFile)
 
-  const root = await mkdtemp(join(tmpdir(), 'amadeus-boot-'))
+  // Include anchors module resolution at the nearest package.json above configPath, so the temp dir lives under repoRoot.
+  const scratchParent = join(repoRoot, '.cordis')
+  await mkdir(scratchParent, { recursive: true })
+  const root = await mkdtemp(join(scratchParent, 'amadeus-boot-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, options.rows !== undefined && options.rows.length > 0 ? `${options.rows.join('\n')}\n` : '[]\n')
 
   const ctx = new Context()
-  // Bare plugin names resolve from the repository root, whose node_modules links every workspace package.
   ctx.baseUrl = `${pathToFileURL(repoRoot).href}/`
   try {
     await ctx.plugin(Loader)

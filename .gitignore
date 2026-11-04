@@ -1,4 +1,5 @@
 node_modules/
+/.cordis/
 /packages/*/lib/
 *.tgz
 *.tsbuildinfo

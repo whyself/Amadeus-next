@@ -24,8 +24,8 @@ describe('verify-package-meta', () => {
     files: ['lib', 'cordis.patch.yml'],
     dsh: { bundle: { patch: './cordis.patch.yml' } },
     dependencies: { yazl: '3.3.1' },
-    peerDependencies: { '@deepseek-ai/cordis': '^4.0.5' },
-    devDependencies: { '@deepseek-ai/cordis': '4.0.5' },
+    peerDependencies: { '@deepseek-ai/cordis': '^4.0.6-alpha.2' },
+    devDependencies: { '@deepseek-ai/cordis': '4.0.6-alpha.2' },
   }
   const patch = '- insert:\n    - id: amadeus-files\n      name: "@amadeus-dsh/files"\n'
   const read = (text: string | null) => (): string | null => text
@@ -42,7 +42,7 @@ describe('verify-package-meta', () => {
   })
 
   it('rejects cordis as a runtime dependency', () => {
-    const manifest = { ...valid, dependencies: { '@deepseek-ai/cordis': '^4.0.5' } }
+    const manifest = { ...valid, dependencies: { '@deepseek-ai/cordis': '^4.0.6-alpha.2' } }
     expect(findPackageMetaViolations('packages/files', manifest, read(patch))).toHaveLength(1)
   })
 

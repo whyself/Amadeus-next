@@ -1,0 +1,8 @@
+{
+  "name": "amadeus-bridge",
+  "publisher": "amadeus-dsh",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.85.0" },
+  "main": "./extension.cjs",
+  "activationEvents": ["*"]
+}

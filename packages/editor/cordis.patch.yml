@@ -1,0 +1,3 @@
+- insert:
+    - id: amadeus-editor
+      name: '@amadeus-dsh/editor'

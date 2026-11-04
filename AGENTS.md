@@ -38,8 +38,10 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 
 ## 与 DSH 的解耦
 
+理由与原 `Amadeus` 方案的取舍见 [与 DSH 解耦的决策](.agents/notes/implemented/architecture/2026-10-25-dsh-decoupling.md)。
+
 - **只依赖 DSH 的公开扩展点**，例如服务、事件、工具注册、waterfall、`systemPrompt`、`appendPluginRecord`、客户端插槽，以及在 `cordis.patch.yml` 中替换或禁用内置插件。只从 `@deepseek-ai/*` 包的公开 `exports` 导入，不读 DSH 安装目录或 `node_modules` 内的路径。找不到扩展点时先向用户说明可选方案和代价，不复制或改写 DSH 原生插件。
-- **兼容性显式声明**：每个包的 `engines.dsh` 写出已验证的 DSH 版本范围，DSH 安装和启动时据此拒绝不兼容版本。当前基线为 0.2.1-rc.3，范围写 `>=0.2.1-rc.3 <0.3.0-0`；DSH 比较时包含预发布版本，上限用 `-0` 排除 0.3.0 的预发布。需要与宿主共享实例的 `@deepseek-ai/*` 包同时写进 `peerDependencies` 与 `devDependencies`；第三方依赖写进 `dependencies`。
+- **兼容性显式声明**：每个包的 `engines.dsh` 写出已验证的 DSH 版本范围，DSH 安装和启动时据此拒绝不兼容版本。当前基线为 0.2.2-alpha.3，范围写 `>=0.2.2-alpha.3 <0.3.0-0`；DSH 比较时包含预发布版本，上限用 `-0` 排除 0.3.0 的预发布。需要与宿主共享实例的 `@deepseek-ai/*` 包同时写进 `peerDependencies` 与 `devDependencies`；第三方依赖写进 `dependencies`。
 - **配置走 cordis**：随部署变化的选项是经过 Schemastery 校验的插件 `Config` 字段，可在 profile 的 `cordis.patch.yml` 中修改。`DEFAULT_*` 常量不算可配置。
 - **外部程序不由插件安装**：需要外部可执行文件或服务时，经 `Config` 指定路径或地址，加载时检测；缺失时报出明确错误，只停用依赖它的功能，插件其余部分照常加载。
 
@@ -75,6 +77,14 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 - 每个 bundle 有一个经过真实 DSH Loader 组合的加载测试，覆盖安装后 `cordis.patch.yml` 能被组合、插件能启动和销毁；用 [scripts/test-support/boot-bundle.ts](scripts/test-support/boot-bundle.ts) 加载，模板是 [packages/example/tests/loader.spec.ts](packages/example/tests/loader.spec.ts)。加载测试读取构建产物，运行前先 `pnpm run build`。
 - 新增的检查规则附一个会被它拒绝的非法用例。
 - 汇报时只列实际运行过的命令。无法自动化的行为标注为需要人工验收。
+
+## 多 Agent 协作
+
+- 使用 Herdr（`herdr-app` / `hc`）按角色与 space 协作：`leader` 负责统一调度与验收（或与 `planner` 协同规划），`impler` 负责实现与验证，`reviewer` 负责独立评审；`impler` 与 `reviewer` 不直接互相调用，全部由 `leader` 统一调度。
+- 只有 `impler` 完成的实现需要调度 `reviewer` 审核，或用户明确要求使用 `reviewer` 评审时才调度；其余简单任务由 `leader` 自行完成，不默认启动 `reviewer`。
+- `leader` 向 `impler` 或 `reviewer` 派发任务时，由 `leader` 自行决定发送的提示词内容，只需明确限制它们不得互相调用（不调用 `hc` 联系对方，完成后直接在回复中输出结论），再由 `leader` 通过 `hc wait` 与 `hc read` 收集结果并统一调度。调用 `hc send` 后检查返回值中的 `started: true`（或目标状态变为 `working`）；若因终端忙或多行粘贴折叠在输入框中返回 `started: false`，用 `hc send --force` 补发提交后再 `hc wait`。
+- 多个任务是否复用同一 `impler` 或 `reviewer` 进程，由 `leader` 权衡任务相关性与上下文成本后决定。
+- 各角色绑定的 space 与 profile 由 `.env` 中的 `HERDR_<ROLE>_SPACE` 与 `HERDR_<ROLE>_NAME` 指定，各 profile 的启动命令与参数定义在 `HERDR_PROFILE_<NAME>_*` 中。仅 `dsh-tui` 不通过命令行传参，首次启动或切换配置时需将模型、effort、全权限与跳过引导/launchpad 写入 `~/.dsh-tui/` 下的对应 JSON 配置。
 
 ## 发布
 
