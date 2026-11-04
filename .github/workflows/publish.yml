@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - '*@*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
@@ -21,9 +29,12 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Resolve package from tag
         id: pkg
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          dir="${GITHUB_REF_NAME%@*}"
-          version="${GITHUB_REF_NAME##*@}"
+          [[ "$RELEASE_TAG" =~ ^[a-z0-9-]+@[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]] || { echo "::error::invalid release tag"; exit 1; }
+          dir="${RELEASE_TAG%@*}"
+          version="${RELEASE_TAG##*@}"
           test -f "packages/$dir/package.json" || { echo "::error::packages/$dir/package.json does not exist"; exit 1; }
           actual="$(node -p "require('./packages/$dir/package.json').version")"
           test "$actual" = "$version" || { echo "::error::tag version $version != package.json version $actual"; exit 1; }
@@ -37,4 +48,6 @@ jobs:
         run: pnpm pack --out package.tgz
       - name: Publish
         working-directory: packages/${{ steps.pkg.outputs.dir }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: npm publish package.tgz --access public --provenance
