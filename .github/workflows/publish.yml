@@ -10,6 +10,10 @@ on:
         description: Existing release tag
         required: true
         type: string
+      stage:
+        description: Stage the package for npm approval
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -50,4 +54,11 @@ jobs:
         working-directory: packages/${{ steps.pkg.outputs.dir }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
-        run: npm publish package.tgz --access public --provenance
+          NPM_STAGE: ${{ inputs.stage || false }}
+        run: |
+          if [ "$NPM_STAGE" = true ]; then
+            npm install --global npm@11.21.0
+            npm stage publish package.tgz --access public --provenance
+          else
+            npm publish package.tgz --access public --provenance
+          fi
