@@ -1,6 +1,6 @@
 {
   "name": "@amadeus-dsh/editor",
-  "version": "0.1.2",
+  "version": "0.1.1",
   "description": "在右侧栏嵌入代码编辑器。",
   "type": "module",
   "main": "./lib/index.js",
