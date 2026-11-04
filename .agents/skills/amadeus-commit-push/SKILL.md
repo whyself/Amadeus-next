@@ -48,7 +48,7 @@ git log --oneline origin/<分支>..HEAD
 - **TypeScript 代码**：运行 `pnpm run lint`、`pnpm run typecheck` 和 `pnpm run hygiene`。
 - **包清单、公共导出、`cordis.patch.yml` 或构建配置**：运行 `pnpm run build` 和 `pnpm run hygiene`，在包目录 `pnpm pack` 并检查打包内容，再按 [AGENTS.md](../../../AGENTS.md#命令) 的本地验证方法把它装进隔离的 `DSH_HOME`，确认配置层出现、插件能加载。
 - **文档、Agent Notes、skill 或导出的 JSDoc**：按 [docs/AGENTS.md](../../../docs/AGENTS.md) 检查，并运行 `pnpm run doc-sync` 和 `git diff --check`。
-- **发布流程（`.github/workflows/publish.yml`、版本号、tag）**：确认 tag 中的版本与包的 `package.json` 一致，并在本地完成 `pnpm pack`。
+- **发布流程（`.github/workflows/publish.yml`、版本号、tag）**：确认 tag 中的版本与包的 `package.json` 一致；在全新依赖环境中执行与发布 workflow 相同的依赖安装、检查和打包步骤，不把已有 `node_modules`、缓存安装或使用 `--ignore-scripts` 的验证当作全新安装通过；再按 [AGENTS.md](../../../AGENTS.md#命令) 在隔离的 `DSH_HOME` 中验证打包后的插件加载。
 
 不要仅仅因为接下来要提交或推送，就手动重复一个已经通过的检查。
 
