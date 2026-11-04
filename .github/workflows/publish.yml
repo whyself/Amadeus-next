@@ -53,7 +53,6 @@ jobs:
       - name: Publish
         working-directory: packages/${{ steps.pkg.outputs.dir }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
           NPM_STAGE: ${{ inputs.stage || false }}
         run: |
           if [ "$NPM_STAGE" = true ]; then
