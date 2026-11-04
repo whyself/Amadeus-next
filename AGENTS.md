@@ -80,7 +80,7 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 
 ## 多 Agent 协作
 
-- 使用 Herdr（`herdr-app` / `hc`）按角色与 space 协作：`leader` 负责统一调度与验收（或与 `planner` 协同规划），`impler` 负责实现与验证，`reviewer` 负责独立评审；`impler` 与 `reviewer` 不直接互相调用，全部由 `leader` 统一调度。
+- 使用 Herdr（`herdr-app` / `hc`）按角色与 space 协作：`planner` 负责与用户对话起草方案文档，可调用 `reviewer` 审查，`leader` 负责统一调度与验收（与 `planner` 同级，执行最终方案文档），`impler` 负责实现与验证，`reviewer` 负责独立评审；`impler` 与 `reviewer` 不直接互相调用，全部由 `leader` 统一调度。
 - 只有 `impler` 完成的实现需要调度 `reviewer` 审核，或用户明确要求使用 `reviewer` 评审时才调度；其余简单任务由 `leader` 自行完成，不默认启动 `reviewer`。
 - `leader` 向 `impler` 或 `reviewer` 派发任务时，由 `leader` 自行决定发送的提示词内容，只需明确限制它们不得互相调用（不调用 `hc` 联系对方，完成后直接在回复中输出结论），再由 `leader` 通过 `hc wait` 与 `hc read` 收集结果并统一调度。调用 `hc send` 后检查返回值中的 `started: true`（或目标状态变为 `working`）；若因终端忙或多行粘贴折叠在输入框中返回 `started: false`，用 `hc send --force` 补发提交后再 `hc wait`。
 - 多个任务是否复用同一 `impler` 或 `reviewer` 进程，由 `leader` 权衡任务相关性与上下文成本后决定。
