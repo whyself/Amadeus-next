@@ -11,9 +11,13 @@ const hopHeaders = ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-aut
  * @param upstream - HTTP or HTTPS upstream origin.
  * @param prefix - Public proxy path prefix.
  * @param registerProduct - Registers the workbench's exact upgrade path before HTML delivery.
+ * @param publicOrigin - Resolves the trusted browser origin for upgrade validation.
  * @returns Request handlers and a synchronous disposer.
  */
-export function createProxy(upstream: string, prefix = '/amadeus/code', registerProduct?: (path: string) => void) {
+export function createProxy(
+  upstream: string, prefix = '/amadeus/code',
+  registerProduct?: (path: string) => void, publicOrigin?: () => string,
+) {
   const target = new URL(upstream)
   if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.pathname !== '/' || target.search || target.hash) {
     throw new Error('Editor upstream must be an HTTP(S) origin without credentials')
@@ -42,7 +46,7 @@ export function createProxy(upstream: string, prefix = '/amadeus/code', register
     return result.startsWith('/') ? result : `/${result}`
   }
 
-  function requestHeaders(req: IncomingMessage, upgrade: boolean): IncomingHttpHeaders {
+  function requestHeaders(req: IncomingMessage, upgrade: boolean, origin?: string): IncomingHttpHeaders {
     const named = (req.headers.connection ?? '').split(',').map(name => name.trim().toLowerCase())
     const blocked = new Set([...hopHeaders, ...named, 'cookie', 'authorization', 'forwarded'])
     const headers: IncomingHttpHeaders = Object.fromEntries(Object.entries(req.headers).filter(([name]) => !blocked.has(name)))
@@ -50,7 +54,7 @@ export function createProxy(upstream: string, prefix = '/amadeus/code', register
     headers['x-forwarded-host'] = req.headers.host ?? target.host
     headers['x-forwarded-prefix'] = prefix
     if (upgrade) {
-      headers.origin = target.origin
+      if (origin !== undefined) headers['x-forwarded-proto'] = new URL(origin).protocol.slice(0, -1)
       headers.connection = 'Upgrade'
       headers.upgrade = 'websocket'
     }
@@ -127,13 +131,14 @@ export function createProxy(upstream: string, prefix = '/amadeus/code', register
     const host = req.headers.host
     const forwarded = req.headers['x-forwarded-proto']
     const protocol = req.socket instanceof TLSSocket || forwarded === 'https' ? 'https' : 'http'
-    const origin = host ? `${protocol}://${host}` : ''
-    if (!path || closed || !host || !isSameOrigin(req.headers, origin) || req.headers.upgrade?.toLowerCase() !== 'websocket') {
+    const origin = publicOrigin === undefined ? (host ? `${protocol}://${host}` : '') : publicOrigin()
+    if (!path || closed || !host || host !== new URL(origin).host
+      || !isSameOrigin(req.headers, origin) || req.headers.upgrade?.toLowerCase() !== 'websocket') {
       socket.destroy()
       return
     }
     track(socket)
-    const outgoing = track(transport.request(target, { method: req.method, path, headers: requestHeaders(req, true) }))
+    const outgoing = track(transport.request(target, { method: req.method, path, headers: requestHeaders(req, true, origin) }))
     const fail = () => { outgoing.destroy(); socket.destroy() }
     socket.once('error', fail)
     socket.once('close', () => { outgoing.destroy() })

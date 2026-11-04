@@ -52,7 +52,7 @@ it('strips credentials, rewrites redirects, and aborts active HTTP requests on c
 it('rejects cross-origin upgrades and destroys upgraded streams on close', async () => {
   const upstream = http.createServer()
   upstream.on('upgrade', (req, socket) => {
-    expect(req.headers.origin).toBe(`http://127.0.0.1:${upstreamPort}`)
+    expect(req.headers.origin).toBe(`http://127.0.0.1:${publicPort}`)
     socket.on('end', () => { socket.destroy() })
     socket.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n')
   })
@@ -74,6 +74,78 @@ it('rejects cross-origin upgrades and destroys upgraded streams on close', async
   const ended = once(socket, 'close')
   proxy.close()
   await ended
+})
+
+it('forwards a trusted HTTPS workbench upgrade without trusting forwarded scheme or accepting a cross-origin socket', async () => {
+  const publicOrigin = 'https://amadeus.tailnet.test'
+  const product = 'stable-ee31cdbe02c07b3ba718007f221d14c890696c61'
+  const targetPath = `/${product}?reconnectionToken=abc&reconnection=false`
+  const observed: {
+    url?: string | undefined
+    origin?: string | undefined
+    host?: string | undefined
+    proto?: string | string[] | undefined
+  } = {}
+  const upstream = http.createServer()
+  upstream.on('upgrade', (req, socket) => {
+    if (req.headers.origin !== publicOrigin || req.headers['x-forwarded-host'] !== 'amadeus.tailnet.test') {
+      socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n')
+      return
+    }
+    observed.url = req.url
+    observed.origin = req.headers.origin
+    observed.host = req.headers['x-forwarded-host']
+    observed.proto = req.headers['x-forwarded-proto']
+    socket.on('end', () => { socket.destroy() })
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n')
+  })
+  const upstreamPort = await listen(upstream)
+  const proxy = createProxy(`http://127.0.0.1:${upstreamPort}`, '/amadeus/code', undefined, () => publicOrigin)
+  const server = http.createServer(proxy.handle)
+  server.on('upgrade', proxy.upgrade)
+  const port = await listen(server)
+  const connect = async (
+    origin: string, forwardedProto?: string, host = 'amadeus.tailnet.test', fetchSite?: string,
+  ): Promise<{ socket: net.Socket; response: string }> => {
+    const socket = net.connect(port, '127.0.0.1')
+    await once(socket, 'connect')
+    const response = new Promise<string>((resolve, reject) => {
+      socket.once('data', (chunk) => { resolve(String(chunk)) })
+      socket.once('end', () => { resolve('') })
+      socket.once('error', reject)
+    })
+    socket.write([
+      `GET /amadeus/code${targetPath} HTTP/1.1`,
+      `Host: ${host}`,
+      `Origin: ${origin}`,
+      'Connection: Upgrade',
+      'Upgrade: websocket',
+      ...(forwardedProto ? [`X-Forwarded-Proto: ${forwardedProto}`] : []),
+      ...(fetchSite ? [`Sec-Fetch-Site: ${fetchSite}`] : []),
+      '', '',
+    ].join('\r\n'))
+    return { socket, response: await response }
+  }
+  try {
+    const rejected = await connect('https://evil.test', 'https')
+    expect(rejected.response).toBe('')
+    rejected.socket.destroy()
+    const spoofedHost = await connect(publicOrigin, 'https', 'attacker.test')
+    expect(spoofedHost.response).toBe('')
+    spoofedHost.socket.destroy()
+    const crossSite = await connect(publicOrigin, 'https', 'amadeus.tailnet.test', 'cross-site')
+    expect(crossSite.response).toBe('')
+    crossSite.socket.destroy()
+    const accepted = await connect(publicOrigin, 'http')
+    expect(accepted.response).toContain('101 Switching Protocols')
+    expect(observed).toEqual({ url: targetPath, origin: publicOrigin, host: 'amadeus.tailnet.test', proto: 'https' })
+    accepted.socket.destroy()
+    const noForwarded = await connect(publicOrigin)
+    expect(noForwarded.response).toContain('101 Switching Protocols')
+    noForwarded.socket.destroy()
+  } finally {
+    proxy.close()
+  }
 })
 
 it('registers the workbench upgrade path before delivering uncompressed HTML', async () => {

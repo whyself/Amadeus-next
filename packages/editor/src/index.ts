@@ -108,7 +108,7 @@ interface EditorSession {
 export const name = 'amadeus-editor'
 
 /** Required host services. */
-export const inject = ['webServer', 'sandboxPolicy', 'sessions', 'workingDirectory']
+export const inject = ['webServer', 'sandboxPolicy', 'sessions', 'sessionPersistence', 'workingDirectory']
 
 /**
  * Register the editor routes for the plugin lifetime.
@@ -118,9 +118,9 @@ export const inject = ['webServer', 'sandboxPolicy', 'sessions', 'workingDirecto
 export function apply(ctx: Context, config?: Config): void {
   const resolved = resolveConfig(config)
   const host = ctx as Context & EditorHostContext
-  const { webServer, sandboxPolicy, sessions, workingDirectory } = host
-  if (!webServer || !sandboxPolicy || !sessions || !workingDirectory) {
-    throw new Error('Editor requires webServer, sandboxPolicy, sessions and workingDirectory')
+  const { webServer, sandboxPolicy, sessions, sessionPersistence, workingDirectory } = host
+  if (!webServer || !sandboxPolicy || !sessions || !sessionPersistence || !workingDirectory) {
+    throw new Error('Editor requires webServer, sandboxPolicy, sessions, sessionPersistence and workingDirectory')
   }
   ctx.effect(async () => {
     let managed: ManagedEditor | undefined
@@ -161,7 +161,7 @@ export function apply(ctx: Context, config?: Config): void {
             allowedRoot: sandboxPolicy.resolve({ session: live }).workspaceRoot,
           }
         }
-        const stored = await host.sessionPersistence?.stat(sessionId)
+        const stored = await sessionPersistence.stat(sessionId)
         if (!stored) throw new Error(`Session not found: ${sessionId}`)
         const fallbackRoot = sandboxPolicy.resolve().workspaceRoot
         const allowedRoot = stored.header.cwd ?? fallbackRoot
@@ -181,7 +181,7 @@ export function apply(ctx: Context, config?: Config): void {
         },
       }))
       paths.add(upgradePath)
-    })
+    }, () => resolved.publicOrigin ?? webServer.getOrigin())
     async function dispose(): Promise<void> {
       const errors: unknown[] = []
       try {

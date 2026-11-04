@@ -7,6 +7,7 @@ import path from 'node:path'
 import type { Duplex } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, vi } from 'vitest'
+import * as editorPlugin from '../src/index.ts'
 import { apply, createEditorApi, resolveConfig } from '../src/index.ts'
 import { workspaceIdentity } from '../src/security.ts'
 
@@ -138,6 +139,7 @@ it('registers routes and discovered upgrade paths and removes them on Cordis dis
   if (!upstreamAddress || typeof upstreamAddress === 'string') throw new Error('Missing upstream port')
   const routes = new Map<string, (req: http.IncomingMessage, res: http.ServerResponse) => void>()
   const upgrades = new Map<string, (req: http.IncomingMessage, socket: Duplex, head: Buffer) => void>()
+  const stat = vi.fn((id: string) => Promise.resolve(id === 'cold' ? { header: { cwd: cold } } : undefined))
   let hostOrigin = ''
   const ctx = new Context()
   ctx.provide('webServer', {
@@ -152,7 +154,7 @@ it('registers routes and discovered upgrade paths and removes them on Cordis dis
     },
   })
   ctx.provide('sessions', { get: (id: string) => id === 'session' ? { header: { cwd: root } } : undefined })
-  ctx.provide('sessionPersistence', { stat: (id: string) => Promise.resolve(id === 'cold' ? { header: { cwd: cold } } : undefined) })
+  ctx.provide('sessionPersistence', { stat })
   ctx.provide('sandboxPolicy', { resolve: () => ({ workspaceRoot: root }) })
   ctx.provide('workingDirectory', { defaultDirectory: root, get: () => current })
   const web = http.createServer((req, res) => {
@@ -172,7 +174,7 @@ it('registers routes and discovered upgrade paths and removes them on Cordis dis
   if (!address || typeof address === 'string') throw new Error('Missing server port')
   hostOrigin = `http://127.0.0.1:${address.port}`
   try {
-    apply(ctx, { upstream: `http://127.0.0.1:${upstreamAddress.port}`, stateDir: root })
+    await ctx.plugin(editorPlugin, { upstream: `http://127.0.0.1:${upstreamAddress.port}`, stateDir: root })
     await vi.waitFor(() => { expect(routes.size).toBe(6) })
     const base = `http://127.0.0.1:${address.port}`
     expect((await fetch(`${base}/amadeus/editor/workspace`)).status).toBe(200)
@@ -181,9 +183,15 @@ it('registers routes and discovered upgrade paths and removes them on Cordis dis
       workspaceRoot: (await workspaceIdentity(current)).root, maxHotWorkspaces: 3,
       editorOrigin: `http://127.0.0.1:${upstreamAddress.port}`,
     })
-    const coldWorkspace: unknown = await (await fetch(`${base}/amadeus/editor/workspace?sessionId=cold`)).json()
+    expect(stat).not.toHaveBeenCalled()
+    const coldResponse = await fetch(`${base}/amadeus/editor/workspace?sessionId=cold`)
+    expect(coldResponse.status).toBe(200)
+    const coldWorkspace: unknown = await coldResponse.json()
     expect(coldWorkspace).toMatchObject({ workspaceRoot: (await workspaceIdentity(cold)).root, maxHotWorkspaces: 3 })
-    expect((await fetch(`${base}/amadeus/editor/workspace?sessionId=missing`)).status).toBe(400)
+    expect(stat).toHaveBeenCalledWith('cold')
+    const missing = await fetch(`${base}/amadeus/editor/workspace?sessionId=missing`)
+    expect(missing.status).toBe(400)
+    expect(await missing.json()).toEqual({ error: 'Session not found: missing' })
     expect((await fetch(`${base}/amadeus/code/?folder=test`)).status).toBe(200)
     expect(upgrades.has('/amadeus/code/stable-abcdef123456')).toBe(true)
     const socket = net.connect(address.port, '127.0.0.1')
@@ -211,6 +219,7 @@ it('keeps the host running and reports unavailable when the managed executable i
   const register = vi.fn()
   ctx.provide('webServer', { register, registerUpgrade: vi.fn(), getOrigin: () => 'http://127.0.0.1:8080' })
   ctx.provide('sessions', { get: () => undefined })
+  ctx.provide('sessionPersistence', { stat: () => Promise.resolve(undefined) })
   ctx.provide('sandboxPolicy', { resolve: () => ({ workspaceRoot: root }) })
   ctx.provide('workingDirectory', { defaultDirectory: root, get: () => root })
   const messages: string[] = []
@@ -236,6 +245,89 @@ it('keeps the host running and reports unavailable when the managed executable i
     await ctx.fiber.dispose()
   } finally {
     await ctx.fiber.dispose()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('registers a public HTTPS workbench upgrade behind an HTTP reverse proxy', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'editor-public-'))
+  const upstream = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<script src="stable-abcdef123456/static/out/vs/code/browser/workbench/workbench.js"></script>')
+  })
+  const expectedOrigin = 'https://editor.tailnet.test'
+  let upstreamPath = ''
+  upstream.on('upgrade', (req, socket) => {
+    upstreamPath = req.url ?? ''
+    if (req.headers.origin !== expectedOrigin || req.headers['x-forwarded-host'] !== 'editor.tailnet.test') {
+      socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n')
+      return
+    }
+    socket.on('end', () => { socket.destroy() })
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n')
+  })
+  upstream.listen(0, '127.0.0.1')
+  await once(upstream, 'listening')
+  const upstreamAddress = upstream.address()
+  if (!upstreamAddress || typeof upstreamAddress === 'string') throw new Error('Missing upstream port')
+  const routes = new Map<string, (req: http.IncomingMessage, res: http.ServerResponse) => void>()
+  const upgrades = new Map<string, (req: http.IncomingMessage, socket: Duplex, head: Buffer) => void>()
+  const ctx = new Context()
+  ctx.provide('webServer', {
+    getOrigin: () => 'http://127.0.0.1:3080',
+    register(route: { path: string; handler: (req: http.IncomingMessage, res: http.ServerResponse) => void }) {
+      routes.set(route.path, route.handler)
+      return () => { routes.delete(route.path) }
+    },
+    registerUpgrade(route: { path: string; handler: (req: http.IncomingMessage, socket: Duplex, head: Buffer) => void }) {
+      upgrades.set(route.path, route.handler)
+      return () => { upgrades.delete(route.path) }
+    },
+  })
+  ctx.provide('sessions', { get: () => undefined })
+  ctx.provide('sessionPersistence', { stat: () => Promise.resolve(undefined) })
+  ctx.provide('sandboxPolicy', { resolve: () => ({ workspaceRoot: root }) })
+  ctx.provide('workingDirectory', { defaultDirectory: root, get: () => root })
+  const web = http.createServer((req, res) => {
+    const handler = routes.get('/amadeus/code')
+    if (handler) handler(req, res)
+    else res.writeHead(404).end()
+  })
+  web.on('upgrade', (req, socket, head) => {
+    const handler = upgrades.get(new URL(req.url ?? '/', 'http://test').pathname)
+    if (handler) handler(req, socket, head)
+    else socket.destroy()
+  })
+  web.listen(0, '127.0.0.1')
+  await once(web, 'listening')
+  const address = web.address()
+  if (!address || typeof address === 'string') throw new Error('Missing server port')
+  try {
+    apply(ctx, { upstream: `http://127.0.0.1:${upstreamAddress.port}`, publicOrigin: expectedOrigin, stateDir: root })
+    await vi.waitFor(() => { expect(routes.has('/amadeus/code')).toBe(true) })
+    await new Promise<void>((resolve, reject) => {
+      const request = http.get({
+        host: '127.0.0.1', port: address.port, path: '/amadeus/code/?folder=test',
+        headers: { host: 'editor.tailnet.test' },
+      }, (res) => { res.resume(); res.once('end', resolve) })
+      request.once('error', reject)
+    })
+    expect(upgrades.has('/amadeus/code/stable-abcdef123456')).toBe(true)
+    const socket = net.connect(address.port, '127.0.0.1')
+    await once(socket, 'connect')
+    socket.write('GET /amadeus/code/stable-abcdef123456?reconnectionToken=test HTTP/1.1\r\nHost: editor.tailnet.test\r\nOrigin: https://editor.tailnet.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n')
+    const response = await new Promise<string>((resolve) => { socket.once('data', (data) => { resolve(String(data)) }) })
+    expect(response).toContain('101 Switching Protocols')
+    expect(upstreamPath).toBe('/stable-abcdef123456?reconnectionToken=test')
+    socket.destroy()
+  } finally {
+    await ctx.fiber.dispose()
+    web.closeAllConnections()
+    upstream.closeAllConnections()
+    await Promise.all([
+      new Promise<void>(resolve => web.close(() => { resolve() })),
+      new Promise<void>(resolve => upstream.close(() => { resolve() })),
+    ])
     await rm(root, { recursive: true, force: true })
   }
 })

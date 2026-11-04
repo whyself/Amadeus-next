@@ -14,4 +14,5 @@ export function apply(ctx) {
   ctx.provide('sandboxPolicy', { resolve: () => ({ workspaceRoot: process.cwd() }) })
   ctx.provide('workingDirectory', { defaultDirectory: process.cwd(), get: () => process.cwd() })
   ctx.provide('sessions', { get: () => undefined })
+  ctx.provide('sessionPersistence', { stat: async () => undefined })
 }
