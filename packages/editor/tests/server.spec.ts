@@ -261,17 +261,19 @@ it('keeps the host running and reports unavailable when the managed executable i
   }
 })
 
-it('registers a public HTTPS workbench upgrade behind an HTTP reverse proxy', async () => {
+it('serves local and public editor requests without accepting unconfigured origins', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'editor-public-'))
   const upstream = http.createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'text/html' })
     res.end('<script src="stable-abcdef123456/static/out/vs/code/browser/workbench/workbench.js"></script>')
   })
   const expectedOrigin = 'https://editor.tailnet.test'
+  let localOrigin = ''
   let upstreamPath = ''
   upstream.on('upgrade', (req, socket) => {
     upstreamPath = req.url ?? ''
-    if (req.headers.origin !== expectedOrigin || req.headers['x-forwarded-host'] !== 'editor.tailnet.test') {
+    if (![expectedOrigin, localOrigin].includes(String(req.headers.origin))
+      || req.headers['x-forwarded-host'] !== new URL(String(req.headers.origin)).host) {
       socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n')
       return
     }
@@ -286,7 +288,7 @@ it('registers a public HTTPS workbench upgrade behind an HTTP reverse proxy', as
   const upgrades = new Map<string, (req: http.IncomingMessage, socket: Duplex, head: Buffer) => void>()
   const ctx = new Context()
   ctx.provide('webServer', {
-    getOrigin: () => 'http://127.0.0.1:3080',
+    getOrigin: () => localOrigin,
     register(route: { path: string; handler: (req: http.IncomingMessage, res: http.ServerResponse) => void }) {
       routes.set(route.path, route.handler)
       return () => { routes.delete(route.path) }
@@ -301,7 +303,8 @@ it('registers a public HTTPS workbench upgrade behind an HTTP reverse proxy', as
   ctx.provide('sandboxPolicy', { resolve: () => ({ workspaceRoot: root }) })
   ctx.provide('workingDirectory', { defaultDirectory: root, get: () => root })
   const web = http.createServer((req, res) => {
-    const handler = routes.get('/amadeus/code')
+    const pathname = new URL(req.url ?? '/', 'http://test').pathname
+    const handler = routes.get(pathname) ?? (pathname.startsWith('/amadeus/code/') ? routes.get('/amadeus/code') : undefined)
     if (handler) handler(req, res)
     else res.writeHead(404).end()
   })
@@ -314,9 +317,27 @@ it('registers a public HTTPS workbench upgrade behind an HTTP reverse proxy', as
   await once(web, 'listening')
   const address = web.address()
   if (!address || typeof address === 'string') throw new Error('Missing server port')
+  localOrigin = `http://127.0.0.1:${address.port}`
+  const listenPort = address.port
+  async function status(pathname: string, headers: Record<string, string>): Promise<number | undefined> {
+    return new Promise((resolve, reject) => {
+      const request = http.get({ host: '127.0.0.1', port: listenPort, path: pathname, headers }, (res) => {
+        res.resume()
+        res.once('end', () => { resolve(res.statusCode) })
+      })
+      request.once('error', reject)
+    })
+  }
   try {
     apply(ctx, { upstream: `http://127.0.0.1:${upstreamAddress.port}`, publicOrigin: expectedOrigin, stateDir: root })
     await vi.waitFor(() => { expect(routes.has('/amadeus/code')).toBe(true) })
+    for (const pathname of ['/amadeus/editor/setup', '/amadeus/editor/workspace', '/amadeus/code/?folder=test']) {
+      expect(await status(pathname, { host: new URL(localOrigin).host })).toBe(200)
+      expect(await status(pathname, { host: new URL(localOrigin).host, origin: localOrigin })).toBe(200)
+      expect(await status(pathname, { host: 'editor.tailnet.test', origin: expectedOrigin })).toBe(200)
+      expect(await status(pathname, { host: 'attacker.test', origin: 'https://attacker.test' })).toBe(403)
+      expect(await status(pathname, { host: new URL(localOrigin).host, origin: expectedOrigin })).toBe(403)
+    }
     await new Promise<void>((resolve, reject) => {
       const request = http.get({
         host: '127.0.0.1', port: address.port, path: '/amadeus/code/?folder=test',
@@ -325,13 +346,15 @@ it('registers a public HTTPS workbench upgrade behind an HTTP reverse proxy', as
       request.once('error', reject)
     })
     expect(upgrades.has('/amadeus/code/stable-abcdef123456')).toBe(true)
-    const socket = net.connect(address.port, '127.0.0.1')
-    await once(socket, 'connect')
-    socket.write('GET /amadeus/code/stable-abcdef123456?reconnectionToken=test HTTP/1.1\r\nHost: editor.tailnet.test\r\nOrigin: https://editor.tailnet.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n')
-    const response = await new Promise<string>((resolve) => { socket.once('data', (data) => { resolve(String(data)) }) })
-    expect(response).toContain('101 Switching Protocols')
-    expect(upstreamPath).toBe('/stable-abcdef123456?reconnectionToken=test')
-    socket.destroy()
+    for (const origin of [expectedOrigin, localOrigin]) {
+      const socket = net.connect(address.port, '127.0.0.1')
+      await once(socket, 'connect')
+      socket.write(`GET /amadeus/code/stable-abcdef123456?reconnectionToken=test HTTP/1.1\r\nHost: ${new URL(origin).host}\r\nOrigin: ${origin}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`)
+      const response = await new Promise<string>((resolve) => { socket.once('data', (data) => { resolve(String(data)) }) })
+      expect(response).toContain('101 Switching Protocols')
+      expect(upstreamPath).toBe('/stable-abcdef123456?reconnectionToken=test')
+      socket.destroy()
+    }
   } finally {
     await ctx.fiber.dispose()
     web.closeAllConnections()

@@ -26,7 +26,7 @@ Web 页面经同源 `/amadeus/code` 代理加载；Desktop 使用工作区接口
 
 [`proxy.ts`](../../../../packages/editor/src/proxy.ts) 剥离宿主 Cookie、Authorization 和逐跳头，重写重定向地址，并持有活动 HTTP 与 WebSocket 连接。核心工作台的升级路径从返回的 HTML 中发现，通过公开的精确路径注册接口登记；插件不修改 WebServer 的私有路由表。
 
-[`index.ts`](../../../../packages/editor/src/index.ts) 的工作区和桥接接口校验公开来源的 Host、显式来源信息及规范化后的工作区路径。状态修改还需要工作区接口签发的随机 capability。Desktop 转发会移除 Origin 和 Sec-Fetch-Site，因此两者均缺失时依靠 Host 与 capability 校验；显式跨站来源仍被拒绝，不额外放开 CORS。
+[`index.ts`](../../../../packages/editor/src/index.ts) 的准备、工作区和桥接接口校验 DSH 监听地址或配置的公开来源的 Host；显式 Origin 必须与所用 Host 对应的来源一致，工作区路径另经规范化校验。状态修改还需要工作区接口签发的随机 capability。Desktop 转发会移除 Origin 和 Sec-Fetch-Site，因此两者均缺失时依靠 Host 与 capability 校验；显式跨站来源仍被拒绝，不额外放开 CORS。
 
 代理和直连均不能代替访问认证。code-server 具备终端、任务和扩展执行能力；入口的 realpath 校验防止文件定位越界，但不提供操作系统级隔离。部署以可信的宿主用户、回环网络或受保护的外部网关为前提，外部实例还需要与 DSH 共享相同的工作区路径。
 

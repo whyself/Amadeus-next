@@ -4,6 +4,22 @@ import path from 'node:path'
 import type { IncomingHttpHeaders } from 'node:http'
 
 /**
+ * Match a request to an explicitly allowed local or public origin.
+ * @param headers - Request Host and optional browser Origin metadata.
+ * @param origins - Trusted deployment origins, without paths or credentials.
+ * @returns The matching origin, or undefined when Host and Origin do not agree.
+ */
+export function requestOrigin(headers: IncomingHttpHeaders, origins: readonly string[]): string | undefined {
+  for (const value of origins) {
+    const origin = new URL(value)
+    if (headers.host !== origin.host) continue
+    if (headers.origin !== undefined && headers.origin !== origin.origin) continue
+    return origin.origin
+  }
+  return undefined
+}
+
+/**
  * Resolve a workspace to its canonical path for bridge registration.
  * @param directory - Existing workspace directory.
  * @returns Canonical path and its SHA-256 registration key.

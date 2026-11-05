@@ -11,12 +11,12 @@ const hopHeaders = ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-aut
  * @param upstream - HTTP or HTTPS upstream origin.
  * @param prefix - Public proxy path prefix.
  * @param registerProduct - Registers the workbench's exact upgrade path before HTML delivery.
- * @param publicOrigin - Resolves the trusted browser origin for upgrade validation.
+ * @param publicOrigin - Resolves the matching trusted browser origin from upgrade headers.
  * @returns Request handlers and a synchronous disposer.
  */
 export function createProxy(
   upstream: string, prefix = '/amadeus/code',
-  registerProduct?: (path: string) => void, publicOrigin?: () => string,
+  registerProduct?: (path: string) => void, publicOrigin?: (headers: IncomingHttpHeaders) => string | undefined,
 ) {
   const target = new URL(upstream)
   if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.pathname !== '/' || target.search || target.hash) {
@@ -131,8 +131,8 @@ export function createProxy(
     const host = req.headers.host
     const forwarded = req.headers['x-forwarded-proto']
     const protocol = req.socket instanceof TLSSocket || forwarded === 'https' ? 'https' : 'http'
-    const origin = publicOrigin === undefined ? (host ? `${protocol}://${host}` : '') : publicOrigin()
-    if (!path || closed || !host || host !== new URL(origin).host
+    const origin = publicOrigin === undefined ? (host ? `${protocol}://${host}` : '') : publicOrigin(req.headers)
+    if (!path || closed || !host || !origin || host !== new URL(origin).host
       || !isSameOrigin(req.headers, origin) || req.headers.upgrade?.toLowerCase() !== 'websocket') {
       socket.destroy()
       return

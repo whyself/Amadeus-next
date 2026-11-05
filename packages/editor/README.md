@@ -24,7 +24,7 @@ Desktop 通过独立的 HTTP 或 HTTPS 地址嵌入 code-server，Web 通过 DSH
 
 `startupTimeoutMs` 控制进程启动超时，`bridgeTimeoutMs` 控制桥接请求超时，`maxHotWorkspaces` 指定客户端热工作区数量上限，默认分别为 15000 毫秒、3000 毫秒和 3 个工作区。
 
-工作区 API 和编辑器代理只接受配置的公开来源的 Host。直接访问时使用 DSH 监听地址；经过反向代理时，应将 `publicOrigin` 配置为浏览器使用的完整 HTTP 或 HTTPS 来源，且代理必须转发对应的 Host。
+准备接口、工作区 API 和编辑器代理同时接受 DSH 监听地址与 `publicOrigin` 配置的公开来源；请求带有 Origin 时，须与所用 Host 对应的来源一致。经过反向代理时，将 `publicOrigin` 配置为浏览器使用的完整 HTTP 或 HTTPS 来源，且代理必须转发对应的 Host；本机仍可使用 DSH 监听地址访问。
 
 桥接模式下，关闭或驱逐工作区前会检查未保存的文本、未命名文档和脏标签页。保存后重新检查；状态未知、检查失败、保存失败或用户取消时保留原 iframe。多个窗口打开同一工作区时禁止自动跨窗口丢弃修改。
 

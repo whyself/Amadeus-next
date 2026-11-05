@@ -1,6 +1,6 @@
 {
   "name": "@amadeus-dsh/bundle",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "整合 Amadeus 品牌与代码编辑器。",
   "type": "module",
   "main": "./lib/index.js",

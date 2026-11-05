@@ -1,4 +1,4 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import os from 'node:os'
 import { access } from 'node:fs/promises'
@@ -12,7 +12,7 @@ import { BridgeClient } from './bridge-client.ts'
 import { WorkspaceBridges } from './bridge-workspace.ts'
 import { startManagedEditor, type ManagedEditor } from './process.ts'
 import { createProxy } from './proxy.ts'
-import { isSameOrigin, validBearer, workspaceIdentity, workspaceTarget } from './security.ts'
+import { isSameOrigin, requestOrigin, validBearer, workspaceIdentity, workspaceTarget } from './security.ts'
 
 /** Editor deployment options. */
 export interface Config {
@@ -140,15 +140,18 @@ export function apply(ctx: Context, config?: Config): void {
   if (!webServer || !sandboxPolicy || !sessions || !sessionPersistence || !workingDirectory) {
     throw new Error('Editor requires webServer, sandboxPolicy, sessions, sessionPersistence and workingDirectory')
   }
+  const originFor = (headers: IncomingHttpHeaders): string | undefined => requestOrigin(headers,
+    resolved.publicOrigin === undefined ? [webServer.getOrigin()] : [webServer.getOrigin(), resolved.publicOrigin])
   ctx.effect(() => {
     const setup = createEditorSetup(resolved)
     const token = randomBytes(32).toString('hex')
     const unregister = webServer.register({
       kind: 'exact', path: '/amadeus/editor/setup',
       handler(req, res) {
-        const expected = new URL(resolved.publicOrigin ?? webServer.getOrigin())
-        if (req.headers.host !== expected.host || (req.headers.origin && req.headers.origin !== expected.origin)
-          || req.headers['sec-fetch-site'] === 'cross-site') { json(res, 403, { error: 'Origin rejected' }); return }
+        const expected = originFor(req.headers)
+        if (expected === undefined || req.headers['sec-fetch-site'] === 'cross-site') {
+          json(res, 403, { error: 'Origin rejected' }); return
+        }
         if (req.method === 'GET') { json(res, 200, { ...setup.snapshot(), token }); return }
         if (req.method !== 'POST' || !validBearer(`Bearer ${String(req.headers['x-amadeus-setup-token'] ?? '')}`, token)) {
           json(res, 403, { error: 'Setup authorization required' }); return
@@ -189,7 +192,7 @@ export function apply(ctx: Context, config?: Config): void {
       bridgeDirectory: path.join(resolved.stateDir, 'bridges'), bridgeMode: resolved.bridgeMode, timeoutMs: resolved.bridgeTimeoutMs,
       maxHotWorkspaces: resolved.maxHotWorkspaces,
       editorOrigin: upstream,
-      allowedOrigin: () => resolved.publicOrigin ?? webServer.getOrigin(),
+      allowedOrigin: originFor,
       async resolveWorkspace(sessionId) {
         if (sessionId === undefined) {
           return {
@@ -219,12 +222,11 @@ export function apply(ctx: Context, config?: Config): void {
       disposers.push(webServer.registerUpgrade({
         path: upgradePath,
         handler(req, socket, head) {
-          if (req.headers.host !== new URL(resolved.publicOrigin ?? webServer.getOrigin()).host) { socket.destroy(); return }
           proxy.upgrade(req, socket, head)
         },
       }))
       paths.add(upgradePath)
-    }, () => resolved.publicOrigin ?? webServer.getOrigin())
+    }, originFor)
     async function dispose(): Promise<void> {
       const errors: unknown[] = []
       try {
@@ -247,7 +249,7 @@ export function apply(ctx: Context, config?: Config): void {
       disposers.push(webServer.register({
         kind: 'prefix', path: '/amadeus/code',
         handler(req, res) {
-          if (req.headers.host !== new URL(resolved.publicOrigin ?? webServer.getOrigin()).host) {
+          if (originFor(req.headers) === undefined) {
             res.writeHead(403).end()
             return
           }
@@ -257,7 +259,6 @@ export function apply(ctx: Context, config?: Config): void {
       disposers.push(webServer.registerUpgrade({
         path: '/amadeus/code',
         handler(req, socket, head) {
-          if (req.headers.host !== new URL(resolved.publicOrigin ?? webServer.getOrigin()).host) { socket.destroy(); return }
           proxy.upgrade(req, socket, head)
         },
       }))
@@ -282,7 +283,7 @@ export interface EditorApiOptions {
   bridgeMode: 'required' | 'disabled'
   timeoutMs: number
   maxHotWorkspaces: number
-  allowedOrigin(): string
+  allowedOrigin(headers: IncomingHttpHeaders): string | undefined
   resolveWorkspace(sessionId: string | undefined): Promise<WorkspaceAccess>
 }
 
@@ -327,7 +328,9 @@ export function createEditorApi(options: EditorApiOptions) {
   async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (isDisposed()) { json(res, 503, { error: 'Editor is shutting down' }); return }
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const expected = new URL(options.allowedOrigin())
+    const allowed = options.allowedOrigin(req.headers)
+    if (allowed === undefined) { json(res, 403, { error: 'Origin rejected' }); return }
+    const expected = new URL(allowed)
     if (req.headers.host !== expected.host) {
       json(res, 403, { error: 'Host rejected' })
       return
