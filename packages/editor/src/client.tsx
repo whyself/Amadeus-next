@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, FormEvent, ReactElement } from 'react'
+import { Button, Input, SettingsForm } from '@deepseek-ai/dsh-client-ui-primitives'
+import { EditorSetup } from './client-setup.tsx'
 import type { Context } from '@deepseek-ai/cordis'
 import { editorCommand, fetchWorkspace, parseDirtyState, type EditorWorkspace } from './client-api.ts'
 import { CloseCoordinator } from './client-close.ts'
@@ -8,6 +10,8 @@ import { EditorAction } from './client-action.tsx'
 import { FramePool, type WorkspaceDirtyState } from './frame-pool.ts'
 import { en, zh } from './locales.ts'
 
+import introduction from '../assets/introduction.png'
+
 const KIND = 'amadeus-code-server'
 const ID = '@amadeus-dsh/editor'
 const ENTRY_ID = 'amadeus-editor'
@@ -15,6 +19,9 @@ const NS = 'amadeusEditor'
 type CopyKey = keyof typeof zh
 
 interface ConfigDraft {
+  installDir: string
+  downloadVersion: string
+  downloadBaseUrl: string
   executablePath: string
   upstream: string
   stateDir: string
@@ -42,6 +49,9 @@ interface ConfigFormHandle {
 
 function emptyDraft(): ConfigDraft {
   return {
+    installDir: '',
+    downloadVersion: '',
+    downloadBaseUrl: '',
     executablePath: '',
     upstream: '',
     stateDir: '',
@@ -57,6 +67,9 @@ function draftFromValue(value: Record<string, unknown> | undefined): ConfigDraft
   if (!value) return emptyDraft()
   const text = (key: string): string => (typeof value[key] === 'string' || typeof value[key] === 'number' ? String(value[key]) : '')
   return {
+    installDir: text('installDir'),
+    downloadVersion: text('downloadVersion'),
+    downloadBaseUrl: text('downloadBaseUrl'),
     executablePath: text('executablePath'),
     upstream: text('upstream'),
     stateDir: text('stateDir'),
@@ -68,23 +81,17 @@ function draftFromValue(value: Record<string, unknown> | undefined): ConfigDraft
   }
 }
 
-const configStyles: Record<'form' | 'section' | 'heading' | 'description' | 'label' | 'input' | 'button' | 'primary' | 'footer', CSSProperties> = {
-  form: { display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640, color: 'var(--dsw-alias-label-primary, inherit)' },
+const configStyles: Record<'form' | 'section' | 'heading' | 'description' | 'label' | 'input' | 'footer', CSSProperties> = {
+  form: { display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 960, color: 'var(--dsw-alias-label-primary, inherit)' },
   section: { display: 'flex', flexDirection: 'column', gap: 14 },
   heading: { margin: 0, fontSize: 16, lineHeight: '24px', fontWeight: 600 },
   description: { margin: 0, color: 'var(--dsw-alias-label-secondary, #666)', fontSize: 13, lineHeight: '20px' },
   label: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, fontWeight: 500 },
   input: {
-    boxSizing: 'border-box', width: '100%', minHeight: 40, padding: '8px 12px', font: 'inherit',
+    boxSizing: 'border-box', width: '100%', minHeight: 32, padding: '6px 10px', font: 'inherit',
     color: 'var(--dsw-alias-label-primary, inherit)', background: 'var(--dsw-alias-bg-layer-3, transparent)',
-    border: '1px solid var(--dsw-alias-border-l4, #aaa)', borderRadius: 'var(--dsw-radius-md, 8px)',
+    border: '0.5px solid var(--dsw-alias-border-l1)', borderRadius: 6,
   },
-  button: {
-    minHeight: 40, padding: '8px 16px', font: 'inherit', cursor: 'pointer',
-    border: '1px solid var(--dsw-alias-border-l4, #aaa)', borderRadius: 8,
-    color: 'var(--dsw-alias-label-primary, inherit)', background: 'transparent',
-  },
-  primary: { background: 'var(--dsw-alias-button-primary-fill, #2b63d9)', color: 'var(--dsw-alias-label-primary-foreground, white)' },
   footer: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
 }
 
@@ -373,7 +380,7 @@ export function apply(ctx: Context): void {
       {error && <div role="alert" style={{ padding: 16 }}>
         <p>{t('error')}</p>
         {!workspace && <p>{t('connectionHelp')}</p>}
-        <button type="button" onClick={() => { setError(false); setRetry(value => value + 1) }}>{t('retry')}</button>
+        <Button variant="outline" size="sm" onClick={() => { setError(false); setRetry(value => value + 1) }}>{t('retry')}</Button>
       </div>}
       <div ref={anchor} style={{ flex: 1, minHeight: 0 }} role={workspace ? undefined : 'status'}>
         {(!workspace || readyFrame !== workbenchFrame) && !error && t('loading')}
@@ -459,8 +466,8 @@ export function apply(ctx: Context): void {
       setFeedback(undefined)
     }
 
-    const submit = (event: FormEvent<HTMLFormElement>): void => {
-      event.preventDefault()
+    const submit = (event?: FormEvent<HTMLFormElement>): void => {
+      event?.preventDefault()
       if (disabled || changed) return
       const ops: ConfigMutationOp[] = []
       if (external && !draft.upstream.trim()) { setFeedback('externalRequired'); return }
@@ -468,7 +475,7 @@ export function apply(ctx: Context): void {
         setFeedback('invalidUrl')
         return
       }
-      for (const key of ['executablePath', 'upstream', 'stateDir', 'publicOrigin'] as const) {
+      for (const key of ['executablePath', 'upstream', 'stateDir', 'publicOrigin', 'installDir', 'downloadVersion', 'downloadBaseUrl'] as const) {
         const trimmed = key === 'upstream' && !external ? '' : draft[key].trim()
         const original = key === 'upstream' && !baseline.current.external ? '' : baseline.current.draft[key].trim()
         if (trimmed === original) continue
@@ -516,62 +523,72 @@ export function apply(ctx: Context): void {
       <label style={configStyles.label}>
         <span>{t(label)}</span>
         <span style={configStyles.description}>{t(help)}</span>
-        <input style={configStyles.input} type={type} min={type === 'number' ? 1 : undefined} step={type === 'number' ? 1 : undefined}
+        <Input type={type} min={type === 'number' ? 1 : undefined} step={type === 'number' ? 1 : undefined}
           value={draft[key]} disabled={disabled} onChange={(event) => { updateField(key, event.target.value) }} />
       </label>
 
     return <form onSubmit={submit} style={configStyles.form} noValidate>
-      <div style={configStyles.section}>
-        <h3 style={configStyles.heading}>{t('configHeading')}</h3>
-        <p style={configStyles.description}>{t('configIntro')}</p>
-      </div>
-      <div style={configStyles.section}>
-        <label style={configStyles.label}>
-          <span>{t('configConnection')}</span>
-          <span style={configStyles.description}>{t('configConnectionDescription')}</span>
-          <select style={configStyles.input} value={external ? 'external' : 'managed'} disabled={disabled}
-            onChange={(event) => { dirty.current = true; setFeedback(undefined); setExternal(event.target.value === 'external') }}>
-            <option value="managed">{t('configManaged')}</option>
-            <option value="external">{t('configExternal')}</option>
-          </select>
-        </label>
-        {external
-          ? field('upstream', 'configUpstream', 'configUpstreamHelp')
-          : field('executablePath', 'configExecutablePath', 'configExecutableHelp')}
-      </div>
-      <details>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('configAdvanced')}</summary>
-        <div style={{ ...configStyles.section, marginTop: 16 }}>
-          <p style={configStyles.description}>{t('configAdvancedDescription')}</p>
-          {field('stateDir', 'configStateDir', 'configStateDirHelp')}
-          {field('publicOrigin', 'configPublicOrigin', 'configPublicOriginHelp')}
-          <label style={configStyles.label}>
-            <span>{t('configBridgeMode')}</span>
-            <span style={configStyles.description}>{t('configBridgeHelp')}</span>
-            <select style={configStyles.input} value={draft.bridgeMode} disabled={disabled} onChange={(event) => { updateField('bridgeMode', event.target.value) }}>
-              <option value="">{t('configBridgeDefault')}</option>
-              <option value="required">{t('configBridgeRequired')}</option>
-              <option value="disabled">{t('configBridgeDisabled')}</option>
-            </select>
-          </label>
-          {field('startupTimeoutMs', 'configStartupTimeoutMs', 'configStartupTimeoutHelp', 'number')}
-          {field('bridgeTimeoutMs', 'configBridgeTimeoutMs', 'configBridgeTimeoutHelp', 'number')}
-          {field('maxHotWorkspaces', 'configMaxHotWorkspaces', 'configMaxHotWorkspacesHelp', 'number')}
+      <img src={introduction} alt={t('introductionAlt')} style={{ width: '100%', height: 'auto', borderRadius: 10 }} />
+      <SettingsForm labels={{ unavailable: t('configUnavailable'), readOnly: t('configReadOnly'),
+        saveFailed: t('configSaveFailed'), save: t('configSave'), saving: t('configSaving') }}
+      state={{ available: true, writable: snapshot.writable, dirty: dirty.current && !disabled && !changed,
+        invalid: false, saving, failed: feedback === 'failed' }}
+      onSave={() => { submit() }} onDiscard={() => { dirty.current = false }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={configStyles.section}>
+            <h3 style={configStyles.heading}>{t('configHeading')}</h3>
+            <p style={configStyles.description}>{t('configIntro')}</p>
+          </div>
+          <div style={configStyles.section}>
+            <label style={configStyles.label}>
+              <span>{t('configConnection')}</span>
+              <span style={configStyles.description}>{t('configConnectionDescription')}</span>
+              <select style={configStyles.input} value={external ? 'external' : 'managed'} disabled={disabled}
+                onChange={(event) => { dirty.current = true; setFeedback(undefined); setExternal(event.target.value === 'external') }}>
+                <option value="managed">{t('configManaged')}</option>
+                <option value="external">{t('configExternal')}</option>
+              </select>
+            </label>
+            {external
+              ? field('upstream', 'configUpstream', 'configUpstreamHelp')
+              : field('executablePath', 'configExecutablePath', 'configExecutableHelp')}
+          </div>
+          {!external && <EditorSetup t={t} disabled={disabled || changed || dirty.current} />}
+          <details>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('configAdvanced')}</summary>
+            <div style={{ ...configStyles.section, marginTop: 16 }}>
+              <p style={configStyles.description}>{t('configAdvancedDescription')}</p>
+              {field('installDir', 'configInstallDir', 'configInstallDirHelp')}
+              {field('downloadVersion', 'configDownloadVersion', 'configDownloadVersionHelp')}
+              {field('downloadBaseUrl', 'configDownloadBaseUrl', 'configDownloadBaseUrlHelp')}
+              {field('stateDir', 'configStateDir', 'configStateDirHelp')}
+              {field('publicOrigin', 'configPublicOrigin', 'configPublicOriginHelp')}
+              <label style={configStyles.label}>
+                <span>{t('configBridgeMode')}</span>
+                <span style={configStyles.description}>{t('configBridgeHelp')}</span>
+                <select style={configStyles.input} value={draft.bridgeMode} disabled={disabled} onChange={(event) => { updateField('bridgeMode', event.target.value) }}>
+                  <option value="">{t('configBridgeDefault')}</option>
+                  <option value="required">{t('configBridgeRequired')}</option>
+                  <option value="disabled">{t('configBridgeDisabled')}</option>
+                </select>
+              </label>
+              {field('startupTimeoutMs', 'configStartupTimeoutMs', 'configStartupTimeoutHelp', 'number')}
+              {field('bridgeTimeoutMs', 'configBridgeTimeoutMs', 'configBridgeTimeoutHelp', 'number')}
+              {field('maxHotWorkspaces', 'configMaxHotWorkspaces', 'configMaxHotWorkspacesHelp', 'number')}
+            </div>
+          </details>
+          {changed && <div role="alert" style={configStyles.footer}>
+            <span>{t('configChanged')}</span>
+            <Button variant="outline" size="sm" disabled={saving} onClick={reload}>{t('configReload')}</Button>
+          </div>}
+          <div style={configStyles.footer}>
+            {feedback && <span role={feedback === 'saved' ? 'status' : 'alert'}>
+              {t(feedback === 'saved' ? 'configSaved' : feedback === 'invalidUrl' ? 'configInvalidUrl'
+                : feedback === 'invalidNumber' ? 'configInvalidNumber' : feedback === 'externalRequired' ? 'configExternalRequired' : 'configSaveFailed')}
+            </span>}
+          </div>
         </div>
-      </details>
-      {!snapshot.writable && <p role="status" style={configStyles.description}>{t('configReadOnly')}</p>}
-      {changed && <div role="alert" style={configStyles.footer}>
-        <span>{t('configChanged')}</span>
-        <button type="button" style={configStyles.button} disabled={saving} onClick={reload}>{t('configReload')}</button>
-      </div>}
-      <div style={configStyles.footer}>
-        <button type="submit" style={{ ...configStyles.button, ...configStyles.primary, opacity: disabled || changed ? 0.45 : 1 }}
-          disabled={disabled || changed}>{t(saving ? 'configSaving' : 'configSave')}</button>
-        {feedback && <span role={feedback === 'saved' ? 'status' : 'alert'}>
-          {t(feedback === 'saved' ? 'configSaved' : feedback === 'invalidUrl' ? 'configInvalidUrl'
-            : feedback === 'invalidNumber' ? 'configInvalidNumber' : feedback === 'externalRequired' ? 'configExternalRequired' : 'configSaveFailed')}
-        </span>}
-      </div>
+      </SettingsForm>
     </form>
   }
 
@@ -624,6 +641,9 @@ export function apply(ctx: Context): void {
       )))
       cleanups.push(host.slots.inject('plugins.bundle.config', () => host.slots.register(
         { name: 'plugins.bundle.config', key: ID, locale: NS }, ConfigSection,
+      )))
+      cleanups.push(host.slots.inject('plugins.row.config', () => host.slots.register(
+        { name: 'plugins.row.config', key: '@amadeus-dsh/bundle#amadeus-editor', locale: NS }, ConfigSection,
       )))
       cleanups.push(host.sidebarRight.registerCloseHandler(KIND, (sessionId) => {
         const workspace = workspaces.get(sessionId)

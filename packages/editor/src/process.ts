@@ -110,7 +110,13 @@ async function cleanStaleBridges(directory: string): Promise<void> {
   }
 }
 
-async function version(binary: string, timeout: number): Promise<void> {
+/**
+ * Check the executable version without starting a server.
+ * @param binary - Executable path.
+ * @param timeout - Maximum check duration in milliseconds.
+ * @returns Resolves for code-server 4.90 or later within major version 4.
+ */
+export async function checkEditorVersion(binary: string, timeout: number): Promise<void> {
   const child = spawn(binary, ['--version'], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -231,7 +237,7 @@ export async function startManagedEditor(options: ManagedOptions): Promise<Manag
   let child: ChildProcess | undefined
   try {
     await cleanStaleBridges(path.join(options.stateDir, 'bridges'))
-    await version(options.binary, options.startupTimeoutMs)
+    await checkEditorVersion(options.binary, options.startupTimeoutMs)
     await prepare(options)
     child = spawn(options.binary, [
       '--bind-addr', '127.0.0.1:0', '--auth', 'none', '--disable-telemetry', '--disable-update-check',

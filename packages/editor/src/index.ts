@@ -1,11 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import os from 'node:os'
+import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { createEditorSetup, installedExecutable } from './setup.ts'
 import { BridgeClient } from './bridge-client.ts'
 import { WorkspaceBridges } from './bridge-workspace.ts'
 import { startManagedEditor, type ManagedEditor } from './process.ts'
@@ -14,6 +16,9 @@ import { isSameOrigin, validBearer, workspaceIdentity, workspaceTarget } from '.
 
 /** Editor deployment options. */
 export interface Config {
+  installDir?: string
+  downloadVersion?: string
+  downloadBaseUrl?: string
   upstream?: string
   executablePath?: string
   stateDir?: string
@@ -26,6 +31,9 @@ export interface Config {
 
 /** Validated editor deployment options. */
 export interface ResolvedConfig {
+  installDir: string
+  downloadVersion: string
+  downloadBaseUrl: string
   upstream: string | undefined
   executablePath: string
   stateDir: string
@@ -38,6 +46,9 @@ export interface ResolvedConfig {
 
 /** Editor configuration schema. */
 export const Config = z.object({
+  installDir: z.string().volatile(),
+  downloadVersion: z.string().volatile(),
+  downloadBaseUrl: z.string().volatile(),
   upstream: z.string().volatile(),
   executablePath: z.string().volatile(),
   stateDir: z.string().volatile(),
@@ -65,6 +76,9 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
   const plain = unwrapVolatile(config)
   const defaultStateRoot = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh')
   const resolved: ResolvedConfig = {
+    installDir: path.resolve(unwrapVolatile(plain.installDir) ?? path.join(defaultStateRoot, 'editor', 'runtime')),
+    downloadVersion: unwrapVolatile(plain.downloadVersion) ?? '4.145.0',
+    downloadBaseUrl: unwrapVolatile(plain.downloadBaseUrl) ?? 'https://github.com/coder/code-server/releases/download',
     upstream: unwrapVolatile(plain.upstream),
     executablePath: unwrapVolatile(plain.executablePath) ?? 'code-server',
     stateDir: path.resolve(unwrapVolatile(plain.stateDir) ?? path.join(defaultStateRoot, 'editor')),
@@ -77,6 +91,10 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
   for (const value of [resolved.startupTimeoutMs, resolved.bridgeTimeoutMs, resolved.maxHotWorkspaces]) {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Editor timeouts and workspace limit must be positive integers')
   }
+  if (!/^4\.(?:9[0-9]|[1-9][0-9]{2,})\.[0-9]+$/.test(resolved.downloadVersion)) throw new Error('Download version must be a stable code-server version >=4.90.0 <5.0.0')
+  const source = new URL(resolved.downloadBaseUrl)
+  if (source.protocol !== 'https:' || source.username || source.password || source.search || source.hash) throw new Error('Download source must be an HTTPS base URL')
+  resolved.downloadBaseUrl = resolved.downloadBaseUrl.replace(/\/$/, '')
   if (!resolved.executablePath) throw new Error('Editor executable path must not be empty')
   for (const origin of [resolved.upstream, resolved.publicOrigin]) {
     if (origin === undefined) continue
@@ -122,13 +140,38 @@ export function apply(ctx: Context, config?: Config): void {
   if (!webServer || !sandboxPolicy || !sessions || !sessionPersistence || !workingDirectory) {
     throw new Error('Editor requires webServer, sandboxPolicy, sessions, sessionPersistence and workingDirectory')
   }
+  ctx.effect(() => {
+    const setup = createEditorSetup(resolved)
+    const token = randomBytes(32).toString('hex')
+    const unregister = webServer.register({
+      kind: 'exact', path: '/amadeus/editor/setup',
+      handler(req, res) {
+        const expected = new URL(resolved.publicOrigin ?? webServer.getOrigin())
+        if (req.headers.host !== expected.host || (req.headers.origin && req.headers.origin !== expected.origin)
+          || req.headers['sec-fetch-site'] === 'cross-site') { json(res, 403, { error: 'Origin rejected' }); return }
+        if (req.method === 'GET') { json(res, 200, { ...setup.snapshot(), token }); return }
+        if (req.method !== 'POST' || !validBearer(`Bearer ${String(req.headers['x-amadeus-setup-token'] ?? '')}`, token)) {
+          json(res, 403, { error: 'Setup authorization required' }); return
+        }
+        const action = new URL(req.url ?? '/', expected).searchParams.get('action')
+        if (resolved.upstream !== undefined) { json(res, 409, { error: 'External editors are not installed by DSH' }); return }
+        if (action === 'install') setup.start()
+        else if (action === 'cancel') setup.cancel()
+        else { json(res, 400, { error: 'Invalid setup action' }); return }
+        json(res, 200, setup.snapshot())
+      },
+    })
+    return async () => { unregister(); await setup.dispose() }
+  })
   ctx.effect(async () => {
     let managed: ManagedEditor | undefined
     let upstream = resolved.upstream
     if (upstream === undefined) {
+      const downloaded = installedExecutable(resolved)
+      const available = resolved.executablePath === 'code-server' && await access(downloaded).then(() => true, () => false)
       try {
         managed = await startManagedEditor({
-          binary: resolved.executablePath, stateDir: resolved.stateDir,
+          binary: available ? downloaded : resolved.executablePath, stateDir: resolved.stateDir,
           extensionDir: fileURLToPath(new URL('../extension', import.meta.url)), startupTimeoutMs: resolved.startupTimeoutMs,
         })
         upstream = managed.upstream

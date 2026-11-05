@@ -1,6 +1,6 @@
 {
   "name": "@amadeus-dsh/editor",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "在右侧栏嵌入代码编辑器。",
   "type": "module",
   "main": "./lib/index.js",
@@ -15,12 +15,16 @@
       "default": "./lib/client.js"
     },
     "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib",
     "extension",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "locale",
+    "assets",
+    "icon.svg"
   ],
   "dsh": {
     "client": {
@@ -57,10 +61,12 @@
     "@types/react-dom": "^18.3.7",
     "esbuild": "^0.28.2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-alpha.3"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "3.18.6-alpha.2"
+    "@deepseek-ai/schemastery": "3.18.6-alpha.2",
+    "tar": "^7.5.7"
   },
   "keywords": [
     "dsh",
@@ -73,5 +79,6 @@
     "type": "git",
     "url": "git+https://github.com/whyself/Amadeus-next.git",
     "directory": "packages/editor"
-  }
+  },
+  "icon": "./icon.svg"
 }

@@ -13,12 +13,12 @@ Status: implemented
 
 ## 决策
 
-`Amadeus-next` 只交付可通过 `dsh plugin add <包名>` 安装到用户自有 DSH profile 的独立插件包（`@amadeus-dsh/<name>`），将宿主启动、profile 管理和外部软件安装交还给 DSH 与部署环境：
+`Amadeus-next` 只交付可通过 `dsh plugin add <包名>` 安装到用户自有 DSH profile 的独立插件包（`@amadeus-dsh/<name>`），将宿主启动、profile 管理交还给 DSH 与部署环境；外部软件安装遵守[设置页显式授权](2026-11-05-explicit-runtime-installation.md)：
 
 - **单一的 bundle 分发契约**：每个 `packages/<name>/` 都是独立的 npm 包，包含预构建的 `lib/`、`cordis.patch.yml` 和 locale 资源，并在 `package.json` 的 `dsh.bundle.patch` 中声明配置补丁。不提供自定义启动器，不在安装期运行构建脚本，也不拆分额外的 `-runtime` 载体包。
 - **只使用公开扩展点与公开导出**：插件只通过服务、事件、工具注册、waterfall、`systemPrompt`、`appendPluginRecord`、客户端插槽以及 `cordis.patch.yml` 的内置插件替换或禁用与宿主交互；只从 `@deepseek-ai/*` 的 `exports` 公开入口导入，不读取 `node_modules` 内部文件路径，也不复制或改写 DSH 原生插件。
 - **显式版本范围与共享实例约束**：每个包在 `engines.dsh` 中声明已验证的 DSH 版本范围（当前为 `>=0.2.2-alpha.3 <0.3.0-0`）；需要与宿主共享实例的 `@deepseek-ai/*` 包同时写入 `peerDependencies` 和 `devDependencies`（其中 `@deepseek-ai/cordis` 绝不写入 `dependencies`），第三方运行时依赖写入 `dependencies`。该契约由 [scripts/verify-package-meta.ts](../../../../scripts/verify-package-meta.ts) 在 `pnpm run hygiene` 中强制校验。
-- **配置归属 Cordis，外部程序按需检测**：随部署变化的选项定义为经过 Schemastery 校验的插件 `Config` 字段，由用户在自身 profile 的 `cordis.patch.yml` 中配置。需要外部可执行文件或服务时，通过 `Config` 接收路径或地址并在插件加载时检测；缺失时报错并仅停用依赖该程序的功能，不由插件或启动脚本代为下载安装。
+- **配置归属 Cordis，外部程序按需检测**：随部署变化的选项定义为经过 Schemastery 校验的插件 `Config` 字段，由用户在自身 profile 的 `cordis.patch.yml` 中配置。需要外部可执行文件或服务时，通过 `Config` 接收路径或地址并在插件加载时检测；缺失时报错并仅停用依赖该程序的功能，默认不下载安装；用户在设置页明确选择后的安装由[按需安装决策](2026-11-05-explicit-runtime-installation.md)约束。
 - **以真实 Loader 组合验证替代启动器集成**：每个 bundle 通过 [scripts/test-support/boot-bundle.ts](../../../../scripts/test-support/boot-bundle.ts) 在真实的 `@deepseek-ai/cordis-plugin-loader` 与 `@deepseek-ai/cordis-plugin-include` 下从构建产物 `lib/` 和 `cordis.patch.yml` 启动与销毁，验证安装后的组合行为。
 
 ## 考虑过的替代方案
@@ -32,4 +32,4 @@ Status: implemented
 ## 后果
 
 - **获得的能力**：用户可以按需选用任意 `@amadeus-dsh/<name>` 插件装入自己的本地或远端 DSH profile，使用 DSH 原生 CLI 与设置界面管理配置；`engines.dsh` 与 [scripts/verify-package-meta.ts](../../../../scripts/verify-package-meta.ts) 保证了包清单、共享实例依赖和 `cordis.patch.yml` 插入项在发布前即经过静态校验与真实 Loader 组合测试。
-- **付出的代价与转移的职责**：本仓库不再提供含 TeX Live、code-server 和容器编排的一体化 Docker 镜像，外部程序需由用户或部署环境先行准备并在 `Config` 中配置路径或地址；当某项定制不存在公开的 DSH 扩展点时，功能会被推迟或缩小范围，而不能通过读取 DSH 内部文件或复制原生插件强行落地。
+- **付出的代价与转移的职责**：本仓库不再提供含 TeX Live、code-server 和容器编排的一体化 Docker 镜像，外部程序可由用户或部署环境准备并在 `Config` 中配置路径或地址，也可在设置页明确选择后下载；当某项定制不存在公开的 DSH 扩展点时，功能会被推迟或缩小范围，而不能通过读取 DSH 内部文件或复制原生插件强行落地。

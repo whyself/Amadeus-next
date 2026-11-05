@@ -43,7 +43,7 @@ pnpm run hygiene     # 代码门禁：禁止断言到 unknown、包清单规范�
 - **只依赖 DSH 的公开扩展点**，例如服务、事件、工具注册、waterfall、`systemPrompt`、`appendPluginRecord`、客户端插槽，以及在 `cordis.patch.yml` 中替换或禁用内置插件。只从 `@deepseek-ai/*` 包的公开 `exports` 导入，不读 DSH 安装目录或 `node_modules` 内的路径。找不到扩展点时先向用户说明可选方案和代价，不复制或改写 DSH 原生插件。
 - **兼容性显式声明**：每个包的 `engines.dsh` 写出已验证的 DSH 版本范围，DSH 安装和启动时据此拒绝不兼容版本。当前基线为 0.2.2-alpha.3，范围写 `>=0.2.2-alpha.3 <0.3.0-0`；DSH 比较时包含预发布版本，上限用 `-0` 排除 0.3.0 的预发布。需要与宿主共享实例的 `@deepseek-ai/*` 包同时写进 `peerDependencies` 与 `devDependencies`；第三方依赖写进 `dependencies`。
 - **配置走 cordis**：随部署变化的选项是经过 Schemastery 校验的插件 `Config` 字段，可在 profile 的 `cordis.patch.yml` 中修改。`DEFAULT_*` 常量不算可配置。
-- **外部程序不由插件安装**：需要外部可执行文件或服务时，经 `Config` 指定路径或地址，加载时检测；缺失时报出明确错误，只停用依赖它的功能，插件其余部分照常加载。
+- **外部程序按需安装**：默认配置不下载、不安装外部程序；只能在设置页经用户明确选择后安装，安装版本、来源和目录经 `Config` 配置。已有程序或服务经 `Config` 指定路径或地址，加载时检测；缺失时给出设置入口，只停用依赖它的功能。
 
 ## 插件约定
 

@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises'
 const result = await build({
   entryPoints: ['src/client.tsx'],
   write: false,
+  loader: { '.png': 'dataurl' },
   bundle: true,
   platform: 'browser',
   format: 'cjs',

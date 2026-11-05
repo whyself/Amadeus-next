@@ -1,0 +1,76 @@
+{
+  "name": "@amadeus-dsh/bundle",
+  "version": "0.1.0",
+  "description": "整合 Amadeus 品牌与代码编辑器。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "locale",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.2-alpha.3 <0.3.0-0",
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build-client.mjs",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.6-alpha.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.6-alpha.2",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.28.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-alpha.3"
+  },
+  "dependencies": {
+    "@amadeus-dsh/editor": "workspace:^"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "amadeus"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/whyself/Amadeus-next.git",
+    "directory": "packages/bundle"
+  },
+  "icon": "./assets/mark.png"
+}

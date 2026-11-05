@@ -8,7 +8,15 @@ Desktop 通过独立的 HTTP 或 HTTPS 地址嵌入 code-server，Web 通过 DSH
 
 配置保存后在重启 DSH 时生效。code-server 无法启动时，编辑器显示连接失败提示与重试入口，插件设置仍可使用。
 
-受管模式通过 `executablePath` 指定 code-server 可执行文件，默认使用 `code-server`，启动时要求版本不低于 4.90.0 且低于 5.0.0。`stateDir` 保存用户设置、安装的扩展和运行状态，默认使用 `$DSH_HOME/editor`（未设置 `DSH_HOME` 时为 `~/.dsh/editor`）；未配置 `upstream` 时尝试启动本机 code-server，启动失败只停用编辑器功能。
+## 按需安装
+
+本机模式的插件设置页提供“下载并安装”，默认不下载、不安装。向导显示准备步骤、下载进度、取消和重试，在运行 DSH 的机器上下载 code-server；下载后使用 GitHub 官方发布资产的 SHA-256 校验，解压并验证版本，重启 DSH 后使用。配置保存和下载安装是两个独立操作。
+
+`downloadVersion` 默认 `4.145.0`，接受 `>=4.90.0 <5.0.0` 的正式版本；`downloadBaseUrl` 默认 `https://github.com/coder/code-server/releases/download`，可指定保持 `/v<版本>/<发行文件名>` 目录结构的 HTTPS 镜像，但校验信息仍需访问 GitHub API。`installDir` 默认 `$DSH_HOME/editor/runtime`，版本分别放入其子目录；这三个选项修改后须保存并重启 DSH，向导显示当前生效的来源与目录。已下载的文件在卸载插件后保留，不修改系统 PATH，也不安装系统依赖。
+
+向导支持 Linux/macOS 的 x64 和 arm64；Windows 可在 WSL 中运行 DSH，或连接外部服务。设置了 `executablePath` 时优先使用该路径；留空时优先使用指定下载版本的已安装文件，否则从 PATH 查找 `code-server`。外部服务模式不显示安装入口。
+
+受管模式通过 `executablePath` 指定 code-server 可执行文件，启动时要求版本不低于 4.90.0 且低于 5.0.0。`stateDir` 保存用户设置、安装的扩展和运行状态，默认使用 `$DSH_HOME/editor`（未设置 `DSH_HOME` 时为 `~/.dsh/editor`）；未配置 `upstream` 时尝试启动本机 code-server，启动失败只停用编辑器功能。
 
 外部模式通过 `upstream` 指定已运行且免认证的 HTTP 或 HTTPS 服务，外部实例须与 DSH 使用相同的工作区路径。默认的 `bridgeMode: required` 还要求共享回环网络和桥接注册目录；显式配置 `bridgeMode: disabled` 可关闭桥接。
 

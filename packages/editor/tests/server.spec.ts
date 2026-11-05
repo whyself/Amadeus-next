@@ -175,8 +175,19 @@ it('registers routes and discovered upgrade paths and removes them on Cordis dis
   hostOrigin = `http://127.0.0.1:${address.port}`
   try {
     await ctx.plugin(editorPlugin, { upstream: `http://127.0.0.1:${upstreamAddress.port}`, stateDir: root })
-    await vi.waitFor(() => { expect(routes.size).toBe(6) })
+    await vi.waitFor(() => { expect(routes.size).toBe(7) })
     const base = `http://127.0.0.1:${address.port}`
+    const setup: unknown = await (await fetch(`${base}/amadeus/editor/setup`)).json()
+    if (typeof setup !== 'object' || setup === null || !('token' in setup) || typeof setup.token !== 'string') {
+      throw new Error('Missing setup token')
+    }
+    expect((await fetch(`${base}/amadeus/editor/setup?action=install`, { method: 'POST' })).status).toBe(403)
+    expect((await fetch(`${base}/amadeus/editor/setup?action=install`, {
+      method: 'POST', headers: { 'x-amadeus-setup-token': setup.token, origin: 'https://evil.test' },
+    })).status).toBe(403)
+    expect((await fetch(`${base}/amadeus/editor/setup?action=install`, {
+      method: 'POST', headers: { 'x-amadeus-setup-token': setup.token },
+    })).status).toBe(409)
     expect((await fetch(`${base}/amadeus/editor/workspace`)).status).toBe(200)
     const workspace: unknown = await (await fetch(`${base}/amadeus/editor/workspace?sessionId=session`)).json()
     expect(workspace).toMatchObject({
@@ -216,7 +227,8 @@ it('registers routes and discovered upgrade paths and removes them on Cordis dis
 it('keeps the host running and reports unavailable when the managed executable is missing', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'editor-missing-'))
   const ctx = new Context()
-  const register = vi.fn()
+  type Route = { path: string; handler: (req: http.IncomingMessage, res: http.ServerResponse) => void }
+  const register = vi.fn<(route: Route) => () => void>(() => () => {})
   ctx.provide('webServer', { register, registerUpgrade: vi.fn(), getOrigin: () => 'http://127.0.0.1:8080' })
   ctx.provide('sessions', { get: () => undefined })
   ctx.provide('sessionPersistence', { stat: () => Promise.resolve(undefined) })
@@ -228,7 +240,7 @@ it('keeps the host running and reports unavailable when the managed executable i
     apply(ctx, { executablePath: path.join(root, 'missing'), stateDir: root, startupTimeoutMs: 1000 })
     await vi.waitFor(() => { expect(messages).toContain('error') })
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ path: '/amadeus/editor/workspace' }))
-    const route = register.mock.calls[0]?.[0] as { handler: (req: http.IncomingMessage, res: http.ServerResponse) => void }
+    const route = register.mock.calls.find(call => call[0].path === '/amadeus/editor/workspace')?.[0] as { handler: (req: http.IncomingMessage, res: http.ServerResponse) => void }
     const server = http.createServer(route.handler)
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')

@@ -1,0 +1,5 @@
+- insert:
+    - id: amadeus-brand
+      name: '@amadeus-dsh/bundle'
+    - id: amadeus-editor
+      name: '@amadeus-dsh/editor'

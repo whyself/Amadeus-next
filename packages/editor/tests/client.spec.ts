@@ -14,6 +14,7 @@ import { editorCommand, fetchWorkspace, parseDirtyState } from '../src/client-ap
 import { CloseCoordinator } from '../src/client-close.ts'
 import { apply } from '../src/client.tsx'
 import { en, zh } from '../src/locales.ts'
+import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -23,6 +24,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'sidebar.right.tab.document.unpreviewable': { kind: 'list'; scope: 'session' }
     'sidebar.right.tab.files.actions': { kind: 'list'; scope: 'session' }
     'plugins.bundle.config': { kind: 'keyed'; scope: 'root' }
+    'plugins.row.config': { kind: 'keyed'; scope: 'root' }
   }
 }
 
@@ -30,10 +32,10 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 it('ships a browser bundle that registers the editor client with the module loader', async () => {
   const source = await readFile(resolve('packages/editor/lib/client.js'), 'utf8')
-  let registered: { id: string; factory: (requireModule: NodeJS.Require) => unknown } | undefined
+  let registered: { id: string; factory: (requireModule: (id: string) => unknown) => unknown } | undefined
   const window = {
     __ModuleLoader__: {
-      load(registration: { id: string; factory: (requireModule: NodeJS.Require) => unknown }) {
+      load(registration: { id: string; factory: (requireModule: (id: string) => unknown) => unknown }) {
         registered = registration
       },
     },
@@ -41,7 +43,7 @@ it('ships a browser bundle that registers the editor client with the module load
   runInNewContext(source, { window })
   expect(registered?.id).toBe('@amadeus-dsh/editor')
   const requireModule = createRequire(resolve('packages/editor/package.json'))
-  const exported = registered?.factory(requireModule)
+  const exported = registered?.factory(id => id === '@deepseek-ai/dsh-client-ui-primitives' ? primitives : requireModule(id))
   expect(typeof exported).toBe('object')
   expect(exported).toHaveProperty('apply')
 })
@@ -80,7 +82,7 @@ it('registers the sidebar, shortcut and three entry slots and removes them on di
   expect(active).toEqual(new Set([
     'locale', 'type', 'close', 'shortcut', 'sidebar.right.pane.tab',
     'sidebar.right.tab.document.actions', 'sidebar.right.tab.document.unpreviewable', 'sidebar.right.tab.files.actions',
-    'plugins.bundle.config',
+    'plugins.bundle.config', 'plugins.row.config',
   ]))
   await ctx.fiber.dispose()
   expect(active.size).toBe(0)
@@ -97,10 +99,11 @@ it('contributes valid entries to actual keyed and list slot contracts', async ()
       'sidebar.right.tab.document.unpreviewable': { kind: 'list', scope: 'session' },
       'sidebar.right.tab.files.actions': { kind: 'list', scope: 'session' },
       'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
+      'plugins.row.config': { kind: 'keyed', scope: 'root' },
     },
   }, (_props: PropsRenderSlots<
     'sidebar.right.pane.tab' | 'sidebar.right.tab.document.actions' |
-    'sidebar.right.tab.document.unpreviewable' | 'sidebar.right.tab.files.actions' | 'plugins.bundle.config'
+    'sidebar.right.tab.document.unpreviewable' | 'sidebar.right.tab.files.actions' | 'plugins.bundle.config' | 'plugins.row.config'
   >) => null)
   ctx.provide('locale', { bind: () => (key: string) => key, register: () => () => {} })
   ctx.provide('sidebarRightTabs', { register: () => () => {} })
@@ -460,7 +463,7 @@ it('renders localized settings, validates URLs and saves only changed fields', a
       select.value = 'external'
       select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
     })
-    const button = dom.window.document.querySelector('button[type="submit"]') as HTMLButtonElement | null
+    const button = [...container.querySelectorAll('button')].find(button => button.textContent === zh.configSave)
     expect(button).not.toBeNull()
     await act(async () => { button?.click() })
     expect(container.textContent).toContain('请输入外部服务地址')
@@ -549,7 +552,7 @@ it('shows loading and read-only states and preserves an edited draft on a concur
     snapshot = { status: 'ready', writable: false, revision: 1, value: { executablePath: 'code-server' } }
     await act(async () => { listener?.() })
     expect(container.textContent).toContain('This configuration is read-only')
-    expect(container.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true)
+    expect([...container.querySelectorAll('button')].find(button => button.textContent === (locale === 'zh' ? zh.configSave : en.configSave))?.hasAttribute('disabled')).toBe(true)
     snapshot = { ...snapshot, writable: true }
     await act(async () => { listener?.() })
     const input = container.querySelector('input')
@@ -562,7 +565,7 @@ it('shows loading and read-only states and preserves an edited draft on a concur
     await act(async () => { listener?.() })
     expect(input.value).toBe('/my-editor')
     expect(container.textContent).toContain('配置已在其他位置更改')
-    expect(container.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true)
+    expect([...container.querySelectorAll('button')].find(button => button.textContent === (locale === 'zh' ? zh.configSave : en.configSave))?.hasAttribute('disabled')).toBe(true)
     const reload = [...container.querySelectorAll('button')].find(button => button.textContent === '重新载入')
     if (!reload) throw new Error('Missing reload button')
     await act(async () => { reload.click() })
